@@ -31,8 +31,6 @@ This script automates the setup of a development environment using Vagrant and U
 
 ## Installation and Configuration
 
-- The script will check for VirtualBox and Vagrant. If they are not installed, it will install them for you.
-
 - The script will create a Vagrant virtual machine based on the "ubuntu/focal64" box image.
 
 - Once the VM is up and running, you can connect to it using SSH.
@@ -52,8 +50,6 @@ You can customize the script by modifying the following variables:
 - **`PASSWORD`**: The password for the user.
 - **`MEMORY`**: The amount of memory to allocate to the VM.
 - **`CPUs`**: The number of virtual CPUs for the VM.
-- **`DESIRED_VAGRANT_VERSION`**: Specifies the desired Vagrant version.
-- **`DESIRED_VAGRANT_FILE`**: Refers to the filename of the desired Vagrant version.
 - **`NETWORK_INTERFACE`**: Defines the type of network interface.
 
 ## Network Configuration
