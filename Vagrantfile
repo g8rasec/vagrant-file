@@ -1,7 +1,7 @@
 BOX_IMAGE = "ubuntu/focal64"
 HOSTNAME = BOX_IMAGE.split("/").first
 VM_NAME = BOX_IMAGE.split("/")[1]
-USERNAME = "user"
+USERNAME = "gheezzer"
 PASSWORD = "pass"
 MEMORY = "12288"
 CPUs = 7
@@ -37,7 +37,8 @@ Vagrant.configure("2") do |config|
     puts "Defining VM: #{VM_NAME}"
     host.vm.box = BOX_IMAGE
     host.vm.hostname = HOSTNAME
-    host.vm.network "public_network", type: "dhcp", bridge: detect_interface
+    #host.vm.network "public_network", type: "dhcp", bridge: detect_interface
+    host.vm.network "public_network", ip: "172.20.10.10", bridge: detect_interface
   end
 
   config.vm.provider "virtualbox" do |vb|
@@ -51,9 +52,7 @@ Vagrant.configure("2") do |config|
     sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
     systemctl restart sshd    
     
-    sudo apt-get update && apt-get install vim wget curl net-tools htop nmap -y
-    #sudo route del default
-    #sudo route add default gw #{GATEWAY_NETWORK}
+    sudo apt-get update && apt-get install vim wget curl net-tools htop nmap ssh-pass y
 
     if ! id #{USERNAME} &>/dev/null; then
       echo "Creating user #{USERNAME}..."
