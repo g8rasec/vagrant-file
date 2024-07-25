@@ -1,10 +1,10 @@
 BOX_IMAGE = "ubuntu/focal64"
-HOSTNAME = BOX_IMAGE.split("/").first
-VM_NAME = BOX_IMAGE.split("/")[1]
+HOSTNAME = "vm-" + BOX_IMAGE.split("/").first
+VM_NAME = "VM-" + BOX_IMAGE.split("/")[1].upper() + "-DATE(YYYY/MM/DD)"
 USERNAME = "gheezzer"
 PASSWORD = "pass"
 MEMORY = "12288"
-CPUs = 7
+CPUs = 6
 NETWORK_INTERFACE_PREFIX = "wlp" # If you use a wired network, change the interface to "en0"
 GATEWAY_NETWORK = `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
 
