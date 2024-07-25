@@ -1,11 +1,16 @@
 BOX_IMAGE = "ubuntu/focal64"
 HOSTNAME = "vm-" + BOX_IMAGE.split("/").first
-VM_NAME = "VM-" + BOX_IMAGE.split("/")[1].upper() + "-DATE(YYYY/MM/DD)"
-USERNAME = "gheezzer"
+VM_NAME = "VM-" + BOX_IMAGE.split("/")[1].upper() + "-UNIQUE_ID"
+USERNAME = "user"
 PASSWORD = "pass"
 MEMORY = "12288"
 CPUs = 6
-NETWORK_INTERFACE_PREFIX = "wlp" # If you use a wired network, change the interface to "en0"
+
+# NETWORK_INTERFACE_PREFIX specifies the prefix of the network interface name.
+# For wireless connections, you might use a prefix like "wlp".
+# For wired connections, change the prefix to something like "en0" or the appropriate interface name for your setup.
+NETWORK_INTERFACE_PREFIX = "wlp"
+
 GATEWAY_NETWORK = `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
 
 puts "Configurations set:"
@@ -37,8 +42,13 @@ Vagrant.configure("2") do |config|
     puts "Defining VM: #{VM_NAME}"
     host.vm.box = BOX_IMAGE
     host.vm.hostname = HOSTNAME
-    #host.vm.network "public_network", type: "dhcp", bridge: detect_interface
-    host.vm.network "public_network", ip: "172.20.10.10", bridge: detect_interface
+    
+    # To configure the public network, you can switch between DHCP and a static IP address.
+    # To use DHCP, uncomment the line below and comment out the static IP line.
+    # host.vm.network "public_network", type: "dhcp", bridge: detect_interface
+
+    # To use a static IP address, uncomment the line below and comment out the DHCP line.
+    host.vm.network "public_network", ip: "<YOUR IP>", bridge: detect_interface 
   end
 
   config.vm.provider "virtualbox" do |vb|
