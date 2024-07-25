@@ -1,6 +1,6 @@
 BOX_IMAGE = "ubuntu/focal64"
 HOSTNAME = "vm-" + BOX_IMAGE.split("/").first
-VM_NAME = "VM-" + BOX_IMAGE.split("/")[1].upcase + "-UNIQUE_ID"
+VM_NAME = "vm" + "-" + BOX_IMAGE.split("/")[1] + "-" + "UNIQUE-ID".upcase
 USERNAME = "user"
 PASSWORD = "pass"
 MEMORY = "12288"
