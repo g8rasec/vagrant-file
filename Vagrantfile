@@ -61,8 +61,8 @@ Vagrant.configure("2") do |config|
     
     sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
     systemctl restart sshd    
-    
-    sudo apt-get update && apt-get install vim wget curl net-tools htop nmap sshpass -y
+   
+    sudo apt-get update && apt-get install vim zsh wget curl net-tools htop nmap sshpass -y  
 
     if ! id #{USERNAME} &>/dev/null; then
       echo "Creating user #{USERNAME}..."
