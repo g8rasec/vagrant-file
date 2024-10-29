@@ -3,9 +3,17 @@
 This script automates the setup of a development environment using Vagrant and Ubuntu. It ensures that you have the necessary tools and configurations to get started quickly. Here's how to use it:
 
 ## Prerequisites
-
-- **VirtualBox**: VirtualBox is used to run the Ubuntu virtual machine.
-- **Vagrant**: Vagrant is utilized to manage the Ubuntu virtual machine.
+- **Ubuntu 22.04.5 LTS**:
+   Distributor ID: Ubuntu
+   Description: Ubuntu 22.04.5 LTS
+   Release: 22.04
+   Codename: jammy
+- **VirtualBox**:
+   Oracle VM VirtualBox VM Selector v6.1.50_Ubuntu
+   (C) 2005-2024 Oracle Corporation
+   All rights reserved
+- **Vagrant 2.4.1**:
+   Vagrant is utilized to manage the Ubuntu virtual machine
 
 ## Instructions
 

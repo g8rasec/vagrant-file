@@ -44,11 +44,12 @@ Vagrant.configure("2") do |config|
     host.vm.hostname = HOSTNAME
     
     # To configure the public network, you can switch between DHCP and a static IP address.
+    
     # To use DHCP, uncomment the line below and comment out the static IP line.
-    # host.vm.network "public_network", type: "dhcp", bridge: detect_interface
+    host.vm.network "public_network", type: "dhcp", bridge: detect_interface
 
     # To use a static IP address, uncomment the line below and comment out the DHCP line.
-    host.vm.network "public_network", ip: "<YOUR IP>", bridge: detect_interface 
+    #host.vm.network "public_network", ip: "<YOUR IP>", bridge: detect_interface 
   end
 
   config.vm.provider "virtualbox" do |vb|
