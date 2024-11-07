@@ -46,10 +46,10 @@ Vagrant.configure("2") do |config|
     # To configure the public network, you can switch between DHCP and a static IP address.
     
     # To use DHCP, uncomment the line below and comment out the static IP line.
-    host.vm.network "public_network", type: "dhcp", bridge: detect_interface
+    # host.vm.network "public_network", type: "dhcp", bridge: detect_interface
 
     # To use a static IP address, uncomment the line below and comment out the DHCP line.
-    #host.vm.network "public_network", ip: "<YOUR IP>", bridge: detect_interface 
+    host.vm.network "public_network", ip: "<YOUR IP>", bridge: detect_interface 
   end
 
   config.vm.provider "virtualbox" do |vb|
@@ -61,9 +61,9 @@ Vagrant.configure("2") do |config|
     echo "Provisioning shell script..."
     
     sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
-    systemctl restart sshd    
+    sudo systemctl restart sshd
    
-    sudo apt-get update && apt-get install vim zsh wget curl net-tools htop nmap sshpass -y  
+    sudo apt-get update && apt-get install vim zsh wget curl net-tools htop nmap -y  
 
     if ! id #{USERNAME} &>/dev/null; then
       echo "Creating user #{USERNAME}..."
