@@ -1,114 +1,201 @@
-# NETWORK_INTERFACE_PREFIX specifies the prefix of the network interface name.
-# For wireless connections, you might use a prefix like "wlp".
-# For wired connections, change the prefix to something like "en0" or the appropriate interface name for your setup.
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# ==============================================================================
+# 1. VM CONFIGURATION CONSTANTS
+# ==============================================================================
+BOX_IMAGE        = "ubuntu/jammy64"
+PROJECT          = "dev-project"
+CPUs             = 8
+MEMORY           = "15890"
+USERNAME         = "user"
+PASSWORD         = "pass"
+SSH_KEY_FILENAME = "id_ed25519"
+NODE_VERSION     = "24"
+
+# ==============================================================================
+# 2. NETWORK CONFIGURATION
+# ==============================================================================
+# Network mode: 
+# - "private"       : Host-Only IP (always accessible via fixed IP from host)
+# - "public_static" : Bridge with static IP
+# - "public_dhcp"   : Bridge with DHCP (dynamic IP from router)
+NETWORK_MODE             = "private"
+VM_PRIVATE_IP            = "192.168.56.10"
+VM_PUBLIC_IP             = "10.202.92.202"
 NETWORK_INTERFACE_PREFIX = "wlp"
 
-USE_DHCP_NETWORK = false
-BOX_IMAGE = "ubuntu/focal64"
-PROJECT = "test"
-CPUs = 8
-MEMORY = "15890"
-VM_IP_ADDRESS = "0.0.0.0"
-USERNAME = "user"
-PASSWORD = "pass"
-SSH_KEY_FILENAME = "id_ed25519"
-NODE_VERSION = "20"
+# ==============================================================================
+# 3. HELPER FUNCTIONS
+# ==============================================================================
+# Read SSH key safely without crashing if the file is missing on the host
+def read_ssh_key(filename, is_public = false)
+  path = File.expand_path("~/.ssh/#{filename}" + (is_public ? ".pub" : ""))
+  if File.exist?(path)
+    File.read(path).strip
+  else
+    puts "WARNING: Host SSH key not found at #{path}."
+    ""
+  end
+end
 
-HOSTNAME = "vm-" + BOX_IMAGE.split("/").first
-VM_NAME = ("vm" + "-" + BOX_IMAGE.split("/")[1] + "-" + PROJECT).upcase
-
-# Read the SSH public key from the host machine
-SSH_PUBLIC_KEY_CONTENT = File.read(File.expand_path("~/.ssh/#{SSH_KEY_FILENAME}.pub")).strip
-
-# Read the SSH private key from the host machine
-SSH_PRIVATE_KEY_CONTENT = File.read(File.expand_path("~/.ssh/#{SSH_KEY_FILENAME}")).strip
-
-GATEWAY_NETWORK = `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
-
-puts "Configurations set:"
-puts "BOX_IMAGE: #{BOX_IMAGE}"
-puts "HOSTNAME: #{HOSTNAME}"
-puts "VM_NAME: #{VM_NAME}"
-puts "USERNAME: #{USERNAME}"
-puts "PASSWORD: #{PASSWORD}"
-puts "MEMORY: #{MEMORY}"
-puts "CPUs: #{CPUs}"
-puts "NETWORK_INTERFACE_PREFIX: #{NETWORK_INTERFACE_PREFIX}"
-puts "GATEWAY_NETWORK: #{GATEWAY_NETWORK}"
-
+# Detect the network interface matching the prefix
 def detect_interface
   puts "Detecting network interface..."
   interface = `ip -o link show | awk -F': ' '{print $2}' | grep ^#{NETWORK_INTERFACE_PREFIX}`.strip
   if interface.empty?
-    raise "No compatible network interface found."
+    raise "Error: No network interface matching '#{NETWORK_INTERFACE_PREFIX}' was found."
   else
     puts "Detected network interface: #{interface}"
     interface
   end
 end
 
+# ==============================================================================
+# 4. LOAD STATE & LOG CONFIGURATION
+# ==============================================================================
+HOSTNAME  = "vm-" + BOX_IMAGE.split("/").first
+VM_NAME   = ("vm-" + BOX_IMAGE.split("/")[1] + "-" + PROJECT).upcase
+
+SSH_PUBLIC_KEY_CONTENT  = read_ssh_key(SSH_KEY_FILENAME, true)
+SSH_PRIVATE_KEY_CONTENT = read_ssh_key(SSH_KEY_FILENAME, false)
+
+GATEWAY_NETWORK = if NETWORK_MODE.start_with?("public")
+                    `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
+                  else
+                    "N/A (Private Network)"
+                  end
+
+puts "=============================================================================="
+puts "Configurations set:"
+puts "  BOX_IMAGE:        #{BOX_IMAGE}"
+puts "  HOSTNAME:         #{HOSTNAME}"
+puts "  VM_NAME:          #{VM_NAME}"
+puts "  USERNAME:         #{USERNAME}"
+puts "  PASSWORD:         #{PASSWORD}"
+puts "  MEMORY:           #{MEMORY} MB"
+puts "  CPUs:             #{CPUs}"
+puts "  NETWORK_MODE:     #{NETWORK_MODE}"
+if NETWORK_MODE == "private"
+  puts "  VM_IP:            #{VM_PRIVATE_IP}"
+elsif NETWORK_MODE == "public_static"
+  puts "  VM_IP:            #{VM_PUBLIC_IP}"
+else
+  puts "  VM_IP:            DHCP (Dynamic)"
+end
+if NETWORK_MODE.start_with?("public")
+  puts "  INTERFACE_PREFIX: #{NETWORK_INTERFACE_PREFIX}"
+  puts "  GATEWAY_NETWORK:  #{GATEWAY_NETWORK}"
+end
+puts "=============================================================================="
+
+# ==============================================================================
+# 5. VAGRANT CONFIGURATION
+# ==============================================================================
 Vagrant.configure("2") do |config|
   puts "Configuring Vagrant..."
   
   config.vm.define VM_NAME do |host|
     puts "Defining VM: #{VM_NAME}"
-    host.vm.box = BOX_IMAGE
+    host.vm.box      = BOX_IMAGE
     host.vm.hostname = HOSTNAME
     
-      # Configure the public network based on USE_DHCP_NETWORK variable
-      if USE_DHCP_NETWORK
-        host.vm.network "public_network", type: "dhcp", bridge: detect_interface
-      else
-        host.vm.network "public_network", ip: VM_IP_ADDRESS, bridge: detect_interface
-      end
+    # Apply network configuration based on mode
+    case NETWORK_MODE
+    when "private"
+      puts "Configuring private network (Host-Only) with IP: #{VM_PRIVATE_IP}"
+      host.vm.network "private_network", ip: VM_PRIVATE_IP
+    when "public_dhcp"
+      bridge_iface = detect_interface
+      puts "Configuring public network (Bridge) via DHCP on #{bridge_iface}..."
+      host.vm.network "public_network", type: "dhcp", bridge: bridge_iface
+    when "public_static"
+      bridge_iface = detect_interface
+      puts "Configuring public network (Bridge) via Static IP #{VM_PUBLIC_IP} on #{bridge_iface}..."
+      host.vm.network "public_network", ip: VM_PUBLIC_IP, bridge: bridge_iface
+    else
+      raise "Invalid NETWORK_MODE: '#{NETWORK_MODE}'. Choose 'private', 'public_static' or 'public_dhcp'."
+    end
   end
 
+  # VirtualBox Provider Settings
   config.vm.provider "virtualbox" do |vb|
     vb.memory = MEMORY
-    vb.cpus = CPUs
+    vb.cpus   = CPUs
   end
 
+  # Shell Provisioning
   config.vm.provision "shell", inline: <<-SHELL
-    echo "Provisioning shell script..."
+    echo "Starting shell provisioning..."
     
+    # 1. SSH Password Authentication
     echo "Enabling password authentication for SSH..."
-    sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+    if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then
+      sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+    else
+      sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+      sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+    fi
     sudo systemctl restart sshd
    
-    echo "Installing packages..."
-    sudo apt-get update && sudo apt-get install -y vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates curl software-properties-common
+    # 2. Package Installation
+    echo "Installing base packages..."
+    sudo apt-get update && sudo apt-get install -y \
+      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common
 
-    echo "Installing Node.js #{NODE_VERSION}..."
-    curl -fsSL https://deb.nodesource.com/setup_#{NODE_VERSION}.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-    echo "Updating npm to the latest version..."
-    sudo npm install -g npm@latest
+    # 3. Node.js Installation (Only if not already installed)
+    if ! command -v node &>/dev/null; then
+      echo "Installing Node.js #{NODE_VERSION}..."
+      curl -fsSL https://deb.nodesource.com/setup_#{NODE_VERSION}.x | sudo -E bash -
+      sudo apt-get install -y nodejs
+      echo "Updating npm to the latest version..."
+      sudo npm install -g npm@latest
+    else
+      echo "Node.js $(node -v) is already installed."
+    fi
 
-    echo "Installing Gemini CLI..."
-    sudo npm install -g @google/gemini-cli
-
+    # 4. User Creation
     if ! id #{USERNAME} &>/dev/null; then
       echo "Creating user #{USERNAME}..."
       sudo useradd -m -s /bin/bash -G sudo #{USERNAME}
       echo "#{USERNAME}:#{PASSWORD}" | sudo chpasswd
-      echo "Copying default .bashrc and .profile to new user..."
+      echo "Copying default profiles..."
       sudo -u #{USERNAME} cp /etc/skel/.bashrc /home/#{USERNAME}/.bashrc
       sudo -u #{USERNAME} cp /etc/skel/.profile /home/#{USERNAME}/.profile
     else
       echo "User #{USERNAME} already exists."
     fi
-    # SSH Key Setup - Always execute this block
-    echo "Setting up SSH key for #{USERNAME}..."
-    mkdir -p /home/#{USERNAME}/.ssh
-    echo "#{SSH_PUBLIC_KEY_CONTENT}" >> /home/#{USERNAME}/.ssh/authorized_keys
-    chmod 700 /home/#{USERNAME}/.ssh
-    chmod 600 /home/#{USERNAME}/.ssh/authorized_keys
-    chown -R #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh
-    echo "Setting up Bitbucket private key for #{USERNAME}..."
-    echo "#{SSH_PRIVATE_KEY_CONTENT}" > /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
-    chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
-    chmod 600 /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
-              SHELL
-    end
+
+    # 5. Antigravity CLI Installation (Ensure it is present)
+    if ! sudo -u #{USERNAME} -i command -v agy &>/dev/null; then
+      echo "Installing Antigravity CLI (agy) for #{USERNAME}..."
+      sudo -u #{USERNAME} -i bash -c "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+    else
+      echo "Antigravity CLI (agy) is already installed."
+    fi
+
+    # 6. SSH Credentials Configuration
+    # Setup public key
+    if [ -n "#{SSH_PUBLIC_KEY_CONTENT}" ]; then
+      echo "Setting up SSH key for #{USERNAME}..."
+      mkdir -p /home/#{USERNAME}/.ssh
+      if ! grep -qF "#{SSH_PUBLIC_KEY_CONTENT}" /home/#{USERNAME}/.ssh/authorized_keys 2>/dev/null; then
+        echo "#{SSH_PUBLIC_KEY_CONTENT}" >> /home/#{USERNAME}/.ssh/authorized_keys
+      fi
+      chmod 700 /home/#{USERNAME}/.ssh
+      chmod 600 /home/#{USERNAME}/.ssh/authorized_keys
+      chown -R #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh
+    fi
+
+    # Setup private key for Git / Bitbucket access
+    if [ -n "#{SSH_PRIVATE_KEY_CONTENT}" ]; then
+      echo "Setting up private key for #{USERNAME}..."
+      mkdir -p /home/#{USERNAME}/.ssh
+      echo "#{SSH_PRIVATE_KEY_CONTENT}" > /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
+      chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
+      chmod 600 /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
+    fi
+  SHELL
+end
 
 puts "Vagrant configuration completed."

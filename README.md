@@ -1,67 +1,90 @@
-# Vagrant Ubuntu Development Environment Setup
+# Vagrant Sandbox
 
-This script automates the setup of a development environment using Vagrant and Ubuntu. It ensures that you have the necessary tools and configurations to get started quickly. Here's how to use it:
+This repository contains an automated Vagrant configuration to set up a development virtual machine. It is designed to be flexible and portable, working seamlessly across different network environments (such as work or home).
+
+---
+
+## Features
+* **Dynamic Network Modes**: Supports Host-Only (Private) and Bridge (Public, static, or DHCP) connections.
+* **Idempotent Provisioning**: Automated and fast package installation that skips already-installed tools to save time.
+* **SSH Key Integration**: Automatically injects host SSH keys into the VM for passwordless access (without crashing if keys are missing on the host).
+* **Pre-installed Tools**:
+  * Node.js (version 24 by default) and the latest npm.
+  * Antigravity CLI (`agy`).
+  * Utilities: Vim, Zsh, Htop, Curl, Nmap, Net-tools, etc.
+
+---
 
 ## Prerequisites
-- **Ubuntu 22.04.5 LTS**:
-   Distributor ID: Ubuntu
-   Description: Ubuntu 22.04.5 LTS
-   Release: 22.04
-   Codename: jammy
-- **VirtualBox**:
-   VirtualBox Version: 7.0
-- **Vagrant 2.4.2**:
-   Vagrant is utilized to manage the Ubuntu virtual machine
+Before starting, ensure you have the following installed on your host machine:
+1. **VirtualBox** 7.0
+2. **Vagrant** 2.4.2
+3. An SSH key generated at `~/.ssh/id_ed25519` (the script will automatically inject it for passwordless access).
 
-## Instructions
+---
 
-1. Clone this repository to your local machine or download the script.
+## Network Modes (NETWORK_MODE)
 
-2. Open a terminal and navigate to the directory where the script is located.
+At the top of the `Vagrantfile`, you can modify the `NETWORK_MODE` variable to choose how the VM connects to the network:
 
-3. Run the script using the following command:
+| Mode | Value | Description | Recommended Use Case |
+| :--- | :--- | :--- | :--- |
+| **Private (Host-Only)** | `"private"` | Creates an isolated virtual network between your PC and the VM with a fixed IP (`192.168.56.10`). The VM accesses the internet via NAT. | **Recommended for daily use**. Works at home, work, and offline with no risk of IP conflicts. |
+| **Public Static** | `"public_static"` | Connects the VM directly to the physical network (Bridge) with a configured static IP (`10.202.92.202`). | When other devices on the same local physical network need to access the VM. |
+| **Public Dynamic** | `"public_dhcp"` | Connects the VM to the physical network (Bridge) and requests a dynamic IP from the local router via DHCP. | When you need a public connection but are in an environment where IPs are assigned dynamically. |
 
+---
+
+## Getting Started
+
+1. Navigate to the repository directory:
+   ```bash
+   cd ~/repos/vagrant-file
+   ```
+
+2. Start the virtual machine:
    ```bash
    vagrant up
+   ```
 
-4. Run to check the assigned IP using the following command:
-
+3. Access the virtual machine via SSH:
    ```bash
    vagrant ssh
-   exit
+   ```
+   *(Or connect directly via standard SSH using the configured IP: `ssh user@192.168.56.10`)*
 
-5. To log in to the virtual machine from any directory, use the following command:
-
+4. To stop, restart, or update the machine:
    ```bash
-   ssh user@[your-assigned-ip]
+   vagrant halt       # Powers off the VM
+   vagrant reload     # Restarts and applies Vagrantfile network changes
+   vagrant provision  # Re-runs shell provisioning (installs packages/updates)
+   ```
 
-## Installation and Configuration
+---
 
-- The script will create a Vagrant virtual machine based on the "ubuntu/focal64" box image.
+## Customization (Vagrantfile)
 
-- Once the VM is up and running, you can connect to it using SSH.
+You can customize the VM by modifying the configuration variables at the top of the `Vagrantfile`:
 
-- The VM is connected to your network via DHCP, and the default gateway is automatically detected.
+* `BOX_IMAGE`: The base box image to use (default: `"ubuntu/jammy64"`).
+* `CPUs`: The number of CPU cores allocated to the VM (default: `8`).
+* `MEMORY`: The amount of RAM in MB (default: `15890` ~16GB).
+* `USERNAME` / `PASSWORD`: The default user created inside the VM (default: `user` / `pass`).
+* `VM_PRIVATE_IP`: The static IP used in `"private"` mode (default: `192.168.56.10`).
+* `VM_PUBLIC_IP`: The static IP used in `"public_static"` mode (default: `10.202.92.202`).
+* `NETWORK_INTERFACE_PREFIX`: The prefix of your host's physical network interface for Bridge modes (e.g., `"wlp"` for Wi-Fi, `"en"` for ethernet).
 
-- The script also installs several useful packages, including Vim, Wget, Curl, Net-tools, Htop, Nmap, OpenSSH server, and OpenFortiVPN.
+---
 
-- The default SSH configuration allows password authentication for ease of use.
+## Recommended Aliases (Zsh)
 
-## Customization
+To manage the virtual machine from any directory in your terminal, you can add these aliases to your `~/.zshrc`:
 
-You can customize the script by modifying the following variables:
+```bash
+alias vm-status='cd ~/repos/vagrant-file && vagrant status && cd -'
+alias vm-up='cd ~/repos/vagrant-file && vagrant up && cd -'
+alias vm-halt='cd ~/repos/vagrant-file && vagrant halt && cd -'
+alias vm-destroy='cd ~/repos/vagrant-file && vagrant destroy && cd -'
+```
 
-- **`BOX_IMAGE`**: The base box image to use.
-- **`USERNAME`**: The desired username for the VM.
-- **`PASSWORD`**: The password for the user.
-- **`MEMORY`**: The amount of memory to allocate to the VM.
-- **`CPUs`**: The number of virtual CPUs for the VM.
-- **`NETWORK_INTERFACE`**: Defines the type of network interface.
-
-## Network Configuration
-
-The script automatically detects the network interface based on your setup. If you are using a cable connection, it defaults to "en0." If you are using Wi-Fi, it defaults to "wlp."
-
-## Acknowledgments
-
-This script simplifies the setup of a development environment using Vagrant and Ubuntu, ensuring a smooth and consistent development experience.
+*Remember to run `source ~/.zshrc` in your terminal after adding them to apply the changes.*

@@ -1,2 +1,17 @@
+# Vagrant
 .vagrant/
 *.log
+
+# Local Vagrant override (optional user configurations)
+Vagrantfile.local
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Editor / IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
