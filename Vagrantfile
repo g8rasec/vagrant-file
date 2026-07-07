@@ -22,8 +22,12 @@ NODE_VERSION     = "24"
 # - "public_dhcp"   : Bridge with DHCP (dynamic IP from router)
 NETWORK_MODE             = "private"
 VM_PRIVATE_IP            = "192.168.56.10"
-VM_PUBLIC_IP             = "10.202.92.202"
-NETWORK_INTERFACE_PREFIX = "wlp"
+VM_BRIDGED_IP            = "172.23.11.200"
+
+# Interface prefix to auto-detect the host network card for bridged networking:
+# - "en" or "eth"   : Wired Ethernet interfaces (e.g., enp1s0, eth0)
+# - "wlp" or "wlan" : Wireless Wi-Fi interfaces (e.g., wlp0s20f3, wlan0)
+NETWORK_INTERFACE_PREFIX = "en"
 
 # ==============================================================================
 # 3. HELPER FUNCTIONS
@@ -79,7 +83,7 @@ puts "  NETWORK_MODE:     #{NETWORK_MODE}"
 if NETWORK_MODE == "private"
   puts "  VM_IP:            #{VM_PRIVATE_IP}"
 elsif NETWORK_MODE == "public_static"
-  puts "  VM_IP:            #{VM_PUBLIC_IP}"
+  puts "  VM_IP:            #{VM_BRIDGED_IP}"
 else
   puts "  VM_IP:            DHCP (Dynamic)"
 end
@@ -111,8 +115,8 @@ Vagrant.configure("2") do |config|
       host.vm.network "public_network", type: "dhcp", bridge: bridge_iface
     when "public_static"
       bridge_iface = detect_interface
-      puts "Configuring public network (Bridge) via Static IP #{VM_PUBLIC_IP} on #{bridge_iface}..."
-      host.vm.network "public_network", ip: VM_PUBLIC_IP, bridge: bridge_iface
+      puts "Configuring public network (Bridge) via Static IP #{VM_BRIDGED_IP} on #{bridge_iface}..."
+      host.vm.network "public_network", ip: VM_BRIDGED_IP, bridge: bridge_iface
     else
       raise "Invalid NETWORK_MODE: '#{NETWORK_MODE}'. Choose 'private', 'public_static' or 'public_dhcp'."
     end
