@@ -53,6 +53,15 @@ At the top of the `Vagrantfile`, you can modify the `NETWORK_MODE` variable to c
    ```
    *(Or connect directly via standard SSH using the configured IP: `ssh user@192.168.56.10`)*
 
+   For convenience, add this entry to your `~/.ssh/config` and connect with just `ssh vm-ubuntu`:
+   ```ssh-config
+   # Vagrant VM - host-only network
+   Host vm-ubuntu
+       HostName 192.168.56.10
+       User user
+       StrictHostKeyChecking accept-new
+   ```
+
 4. To stop, restart, or update the machine:
    ```bash
    vagrant halt       # Powers off the VM
