@@ -4,6 +4,9 @@
 # Enable Vagrant's built-in disk management (no plugin required)
 ENV["VAGRANT_EXPERIMENTAL"] = "disks"
 
+# Per-machine overrides (gitignored), e.g.: DISK_SIZE = "200GB"
+load "#{__dir__}/Vagrantfile.local" if File.exist?("#{__dir__}/Vagrantfile.local")
+
 # ==============================================================================
 # 1. VM CONFIGURATION CONSTANTS
 # ==============================================================================
@@ -15,7 +18,7 @@ USERNAME         = "user"
 PASSWORD         = "pass"
 SSH_KEY_FILENAME = "id_ed25519"
 NODE_VERSION     = "24"
-DISK_SIZE        = "200GB"
+DISK_SIZE        = "100GB" unless defined?(DISK_SIZE)
 
 # ==============================================================================
 # 2. NETWORK CONFIGURATION
