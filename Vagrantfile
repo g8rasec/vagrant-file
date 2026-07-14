@@ -1,6 +1,9 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+# Enable Vagrant's built-in disk management (no plugin required)
+ENV["VAGRANT_EXPERIMENTAL"] = "disks"
+
 # ==============================================================================
 # 1. VM CONFIGURATION CONSTANTS
 # ==============================================================================
@@ -12,6 +15,7 @@ USERNAME         = "user"
 PASSWORD         = "pass"
 SSH_KEY_FILENAME = "id_ed25519"
 NODE_VERSION     = "24"
+DISK_SIZE        = "200GB"
 
 # ==============================================================================
 # 2. NETWORK CONFIGURATION
@@ -79,6 +83,7 @@ puts "  USERNAME:         #{USERNAME}"
 puts "  PASSWORD:         #{PASSWORD}"
 puts "  MEMORY:           #{MEMORY} MB"
 puts "  CPUs:             #{CPUs}"
+puts "  DISK_SIZE:        #{DISK_SIZE}"
 puts "  NETWORK_MODE:     #{NETWORK_MODE}"
 if NETWORK_MODE == "private"
   puts "  VM_IP:            #{VM_PRIVATE_IP}"
@@ -103,7 +108,8 @@ Vagrant.configure("2") do |config|
     puts "Defining VM: #{VM_NAME}"
     host.vm.box      = BOX_IMAGE
     host.vm.hostname = HOSTNAME
-    
+    host.vm.disk :disk, size: DISK_SIZE, primary: true
+
     # Apply network configuration based on mode
     case NETWORK_MODE
     when "private"

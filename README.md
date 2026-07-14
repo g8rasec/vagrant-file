@@ -78,6 +78,7 @@ You can customize the VM by modifying the configuration variables at the top of 
 * `BOX_IMAGE`: The base box image to use (default: `"ubuntu/jammy64"`).
 * `CPUs`: The number of CPU cores allocated to the VM (default: `8`).
 * `MEMORY`: The amount of RAM in MB (default: `15890` ~16GB).
+* `DISK_SIZE`: The size of the VM primary disk (default: `"200GB"`). Changing it requires recreating the VM (`vagrant destroy && vagrant up`) to take effect on a smaller-to-larger resize of an existing disk, or a `vagrant reload` for a simple grow.
 * `USERNAME` / `PASSWORD`: The default user created inside the VM (default: `user` / `pass`).
 * `VM_PRIVATE_IP`: The static IP used in `"private"` mode (default: `192.168.56.10`).
 * `VM_PUBLIC_IP`: The static IP used in `"public_static"` mode (default: `10.202.92.202`).
