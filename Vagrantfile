@@ -160,7 +160,7 @@ Vagrant.configure("2") do |config|
     # 2. Package Installation
     echo "Installing base packages..."
     sudo apt-get update && sudo apt-get install -y \
-      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common keychain unzip
+      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common keychain unzip zip
 
     # 3. User Creation
     if ! id #{USERNAME} &>/dev/null; then
