@@ -98,3 +98,33 @@ alias vm-destroy='cd ~/repos/vagrant-file && vagrant destroy && cd -'
 ```
 
 *Remember to run `source ~/.zshrc` in your terminal after adding them to apply the changes.*
+
+---
+
+## Git Push via SSH Agent Forwarding
+
+Since the private key configured inside the VM (`id_ed25519_readonly`) only has **read-only** access for safety, you cannot run `git push` directly from the VM using it.
+
+To perform write operations (like `git push`) from the VM, you can temporarily forward your host's SSH agent (which holds your write-access private key) to the VM during your SSH session:
+
+### 1. Connect to the VM enabling Agent Forwarding (`-A`)
+From your host terminal, connect using the `-A` flag:
+```bash
+ssh -A user@192.168.56.10
+```
+*(Or if you configured the SSH alias: `ssh -A vm-ubuntu`)*
+
+### 2. Run Git push inside the VM
+During this SSH session, the VM will have temporary access to the SSH keys loaded in your host's SSH agent:
+```bash
+git push origin feature/my-branch
+```
+
+### 3. Disconnect to revoke access
+Once you close the connection (`exit`), the VM completely loses access to your host's write key.
+
+### How Agent Forwarding (`-A`) Works
+* **No key copying**: Your host's write-access private key is never copied or saved inside the VM. It remains safely on your physical machine.
+* **On-demand signing**: The VM acts as a proxy, forwarding authentication challenges back to your host's active `ssh-agent` to be signed.
+* **Temporary bridge**: The connection to your host's agent is active only for the duration of the SSH session. As soon as you disconnect, the VM loses all authentication capabilities.
+

@@ -10,15 +10,18 @@ load "#{__dir__}/Vagrantfile.local" if File.exist?("#{__dir__}/Vagrantfile.local
 # ==============================================================================
 # 1. VM CONFIGURATION CONSTANTS
 # ==============================================================================
-BOX_IMAGE        = "ubuntu/jammy64"
-PROJECT          = "dev-project"
-CPUs             = 8
-MEMORY           = "15890"
-USERNAME         = "user"
-PASSWORD         = "pass"
-SSH_KEY_FILENAME = "id_ed25519"
-NODE_VERSION     = "24"
-DISK_SIZE        = "100GB" unless defined?(DISK_SIZE)
+BOX_IMAGE        = "ubuntu/jammy64" unless defined?(BOX_IMAGE)
+PROJECT          = "dev-project" unless defined?(PROJECT)
+CPUs             = 8 unless defined?(CPUs)
+MEMORY           = "15890" unless defined?(MEMORY)
+USERNAME         = "user" unless defined?(USERNAME)
+PASSWORD         = "pass" unless defined?(PASSWORD)
+SSH_KEY_FILENAME     = "id_ed25519" unless defined?(SSH_KEY_FILENAME)
+VM_GIT_KEY_FILENAME  = "id_ed25519_readonly" unless defined?(VM_GIT_KEY_FILENAME)
+NODE_VERSION         = "24" unless defined?(NODE_VERSION)
+DISK_SIZE            = "100GB" unless defined?(DISK_SIZE)
+GIT_USER_NAME        = "Developer" unless defined?(GIT_USER_NAME)
+GIT_USER_EMAIL       = "developer@example.com" unless defined?(GIT_USER_EMAIL)
 
 # ==============================================================================
 # 2. NETWORK CONFIGURATION
@@ -27,14 +30,14 @@ DISK_SIZE        = "100GB" unless defined?(DISK_SIZE)
 # - "private"       : Host-Only IP (always accessible via fixed IP from host)
 # - "public_static" : Bridge with static IP
 # - "public_dhcp"   : Bridge with DHCP (dynamic IP from router)
-NETWORK_MODE             = "private"
-VM_PRIVATE_IP            = "192.168.56.10"
-VM_BRIDGED_IP            = "172.23.11.200"
+NETWORK_MODE             = "private" unless defined?(NETWORK_MODE)
+VM_PRIVATE_IP            = "192.168.56.10" unless defined?(VM_PRIVATE_IP)
+VM_BRIDGED_IP            = "172.23.11.200" unless defined?(VM_BRIDGED_IP)
 
 # Interface prefix to auto-detect the host network card for bridged networking:
 # - "en" or "eth"   : Wired Ethernet interfaces (e.g., enp1s0, eth0)
 # - "wlp" or "wlan" : Wireless Wi-Fi interfaces (e.g., wlp0s20f3, wlan0)
-NETWORK_INTERFACE_PREFIX = "en"
+NETWORK_INTERFACE_PREFIX = "en" unless defined?(NETWORK_INTERFACE_PREFIX)
 
 # ==============================================================================
 # 3. HELPER FUNCTIONS
@@ -69,7 +72,7 @@ HOSTNAME  = "vm-" + BOX_IMAGE.split("/").first
 VM_NAME   = ("vm-" + BOX_IMAGE.split("/")[1] + "-" + PROJECT).upcase
 
 SSH_PUBLIC_KEY_CONTENT  = read_ssh_key(SSH_KEY_FILENAME, true)
-SSH_PRIVATE_KEY_CONTENT = read_ssh_key(SSH_KEY_FILENAME, false)
+SSH_PRIVATE_KEY_CONTENT = read_ssh_key(VM_GIT_KEY_FILENAME, false)
 
 GATEWAY_NETWORK = if NETWORK_MODE.start_with?("public")
                     `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
@@ -156,7 +159,7 @@ Vagrant.configure("2") do |config|
     # 2. Package Installation
     echo "Installing base packages..."
     sudo apt-get update && sudo apt-get install -y \
-      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common
+      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common keychain
 
     # 3. Node.js Installation (Only if not already installed)
     if ! command -v node &>/dev/null; then
@@ -214,9 +217,35 @@ Vagrant.configure("2") do |config|
     if [ -n "#{SSH_PRIVATE_KEY_CONTENT}" ]; then
       echo "Setting up private key for #{USERNAME}..."
       mkdir -p /home/#{USERNAME}/.ssh
-      echo "#{SSH_PRIVATE_KEY_CONTENT}" > /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
-      chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
-      chmod 600 /home/#{USERNAME}/.ssh/#{SSH_KEY_FILENAME}
+      echo "#{SSH_PRIVATE_KEY_CONTENT}" > /home/#{USERNAME}/.ssh/id_ed25519
+      chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/id_ed25519
+      chmod 600 /home/#{USERNAME}/.ssh/id_ed25519
+    fi
+
+    # 8. Git Global Configuration
+    echo "Configuring Git global user details..."
+    sudo -u #{USERNAME} -i git config --global user.name "#{GIT_USER_NAME}"
+    sudo -u #{USERNAME} -i git config --global user.email "#{GIT_USER_EMAIL}"
+
+    # 9. Configure Keychain for SSH Agent (to avoid typing passphrase multiple times)
+    echo "Configuring Keychain for SSH Agent..."
+    KEYCHAIN_CONFIG='
+# Keychain setup to manage ssh-agent and passphrase
+if [ -x /usr/bin/keychain ]; then
+    /usr/bin/keychain -q --nogui ~/.ssh/id_ed25519
+    [ -z "$HOSTNAME" ] && HOSTNAME=$(hostname)
+    [ -f ~/.keychain/$HOSTNAME-sh ] && . ~/.keychain/$HOSTNAME-sh
+fi
+'
+    # Append to .bashrc if not already there
+    if ! grep -q "keychain" /home/#{USERNAME}/.bashrc; then
+      echo "$KEYCHAIN_CONFIG" >> /home/#{USERNAME}/.bashrc
+    fi
+    # Append to .zshrc if not already there
+    if [ -f /home/#{USERNAME}/.zshrc ]; then
+      if ! grep -q "keychain" /home/#{USERNAME}/.zshrc; then
+        echo "$KEYCHAIN_CONFIG" >> /home/#{USERNAME}/.zshrc
+      fi
     fi
   SHELL
 end
