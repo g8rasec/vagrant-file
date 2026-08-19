@@ -160,7 +160,7 @@ Vagrant.configure("2") do |config|
     # 2. Package Installation
     echo "Installing base packages..."
     sudo apt-get update && sudo apt-get install -y \
-      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common keychain
+      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common keychain unzip
 
     # 3. User Creation
     if ! id #{USERNAME} &>/dev/null; then
@@ -245,8 +245,14 @@ Vagrant.configure("2") do |config|
         chmod 600 /home/#{USERNAME}/.ssh/known_hosts
       fi
 
-      if sudo -u #{USERNAME} -i command -v chezmoi &>/dev/null; then
-        echo "chezmoi already installed, pulling latest dotfiles..."
+      # A previously failed clone (e.g. bad SSH auth) can leave an incomplete, non-git source dir behind
+      if [ -d "/home/#{USERNAME}/.local/share/chezmoi" ] && [ ! -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
+        echo "Removing incomplete chezmoi source directory from a previous failed attempt..."
+        rm -rf "/home/#{USERNAME}/.local/share/chezmoi"
+      fi
+
+      if [ -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
+        echo "chezmoi source already present, pulling latest dotfiles..."
         sudo -u #{USERNAME} -i bash -c 'chezmoi update --apply'
       else
         echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
