@@ -160,7 +160,7 @@ Vagrant.configure("2") do |config|
     # 2. Package Installation
     echo "Installing base packages..."
     sudo apt-get update && sudo apt-get install -y \
-      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common keychain unzip zip
+      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common unzip zip
 
     # 3. User Creation
     if ! id #{USERNAME} &>/dev/null; then
@@ -265,26 +265,6 @@ Vagrant.configure("2") do |config|
     sudo -u #{USERNAME} -i git config --global user.name "#{GIT_USER_NAME}"
     sudo -u #{USERNAME} -i git config --global user.email "#{GIT_USER_EMAIL}"
 
-    # 11. Configure Keychain for SSH Agent (to avoid typing passphrase multiple times)
-    echo "Configuring Keychain for SSH Agent..."
-    KEYCHAIN_CONFIG='
-# Keychain setup to manage ssh-agent and passphrase
-if [ -x /usr/bin/keychain ]; then
-    /usr/bin/keychain -q --nogui ~/.ssh/id_ed25519
-    [ -z "$HOSTNAME" ] && HOSTNAME=$(hostname)
-    [ -f ~/.keychain/$HOSTNAME-sh ] && . ~/.keychain/$HOSTNAME-sh
-fi
-'
-    # Append to .bashrc if not already there
-    if ! grep -q "keychain" /home/#{USERNAME}/.bashrc; then
-      echo "$KEYCHAIN_CONFIG" >> /home/#{USERNAME}/.bashrc
-    fi
-    # Append to .zshrc if not already there
-    if [ -f /home/#{USERNAME}/.zshrc ]; then
-      if ! grep -q "keychain" /home/#{USERNAME}/.zshrc; then
-        echo "$KEYCHAIN_CONFIG" >> /home/#{USERNAME}/.zshrc
-      fi
-    fi
   SHELL
 end
 
