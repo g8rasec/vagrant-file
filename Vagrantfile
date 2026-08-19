@@ -71,8 +71,9 @@ end
 HOSTNAME  = "vm-" + BOX_IMAGE.split("/").first
 VM_NAME   = ("vm-" + BOX_IMAGE.split("/")[1] + "-" + PROJECT).upcase
 
-SSH_PUBLIC_KEY_CONTENT  = read_ssh_key(SSH_KEY_FILENAME, true)
-SSH_PRIVATE_KEY_CONTENT = read_ssh_key(VM_GIT_KEY_FILENAME, false)
+VM_SSH_PUB_KEY  = read_ssh_key(SSH_KEY_FILENAME, true)
+VM_GIT_PRIV_KEY = read_ssh_key(VM_GIT_KEY_FILENAME, false)
+VM_GIT_PUB_KEY  = read_ssh_key(VM_GIT_KEY_FILENAME, true)
 
 GATEWAY_NETWORK = if NETWORK_MODE.start_with?("public")
                     `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
@@ -202,24 +203,31 @@ Vagrant.configure("2") do |config|
 
     # 7. SSH Credentials Configuration
     # Setup public key
-    if [ -n "#{SSH_PUBLIC_KEY_CONTENT}" ]; then
+    if [ -n "#{VM_SSH_PUB_KEY}" ]; then
       echo "Setting up SSH key for #{USERNAME}..."
       mkdir -p /home/#{USERNAME}/.ssh
-      if ! grep -qF "#{SSH_PUBLIC_KEY_CONTENT}" /home/#{USERNAME}/.ssh/authorized_keys 2>/dev/null; then
-        echo "#{SSH_PUBLIC_KEY_CONTENT}" >> /home/#{USERNAME}/.ssh/authorized_keys
+      if ! grep -qF "#{VM_SSH_PUB_KEY}" /home/#{USERNAME}/.ssh/authorized_keys 2>/dev/null; then
+        echo "#{VM_SSH_PUB_KEY}" >> /home/#{USERNAME}/.ssh/authorized_keys
       fi
       chmod 700 /home/#{USERNAME}/.ssh
       chmod 600 /home/#{USERNAME}/.ssh/authorized_keys
       chown -R #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh
     fi
-
+ 
     # Setup private key for Git / Bitbucket access
-    if [ -n "#{SSH_PRIVATE_KEY_CONTENT}" ]; then
+    if [ -n "#{VM_GIT_PRIV_KEY}" ]; then
       echo "Setting up private key for #{USERNAME}..."
       mkdir -p /home/#{USERNAME}/.ssh
-      echo "#{SSH_PRIVATE_KEY_CONTENT}" > /home/#{USERNAME}/.ssh/id_ed25519
+      echo "#{VM_GIT_PRIV_KEY}" > /home/#{USERNAME}/.ssh/id_ed25519
       chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/id_ed25519
       chmod 600 /home/#{USERNAME}/.ssh/id_ed25519
+      
+      if [ -n "#{VM_GIT_PUB_KEY}" ]; then
+        echo "Setting up matching public key for #{USERNAME}..."
+        echo "#{VM_GIT_PUB_KEY}" > /home/#{USERNAME}/.ssh/id_ed25519.pub
+        chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/id_ed25519.pub
+        chmod 644 /home/#{USERNAME}/.ssh/id_ed25519.pub
+      fi
     fi
 
     # 8. Git Global Configuration
