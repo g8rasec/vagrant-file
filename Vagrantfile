@@ -189,7 +189,15 @@ Vagrant.configure("2") do |config|
       echo "Antigravity CLI (agy) is already installed."
     fi
 
-    # 6. SSH Credentials Configuration
+    # 6. Claude Code Installation
+    if ! sudo -u #{USERNAME} -i command -v claude &>/dev/null; then
+      echo "Installing Claude Code for #{USERNAME}..."
+      sudo -u #{USERNAME} -i bash -c "curl -fsSL https://claude.ai/install.sh | bash"
+    else
+      echo "Claude Code is already installed."
+    fi
+
+    # 7. SSH Credentials Configuration
     # Setup public key
     if [ -n "#{SSH_PUBLIC_KEY_CONTENT}" ]; then
       echo "Setting up SSH key for #{USERNAME}..."
