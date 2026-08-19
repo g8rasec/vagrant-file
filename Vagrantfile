@@ -16,12 +16,12 @@ CPUs             = 8 unless defined?(CPUs)
 MEMORY           = "15890" unless defined?(MEMORY)
 USERNAME         = "user" unless defined?(USERNAME)
 PASSWORD         = "pass" unless defined?(PASSWORD)
-SSH_KEY_FILENAME     = "id_ed25519" unless defined?(SSH_KEY_FILENAME)
-VM_GIT_KEY_FILENAME  = "id_ed25519_readonly" unless defined?(VM_GIT_KEY_FILENAME)
-NODE_VERSION         = "24" unless defined?(NODE_VERSION)
+SSH_KEY_FILENAME     = "id_ed25519" unless defined?(SSH_KEY_FILENAME)             # host key authorized to SSH INTO the VM
+VM_GIT_KEY_FILENAME  = "id_ed25519_readonly" unless defined?(VM_GIT_KEY_FILENAME) # read-only key placed INSIDE the VM for Git access
 DISK_SIZE            = "100GB" unless defined?(DISK_SIZE)
 GIT_USER_NAME        = "Developer" unless defined?(GIT_USER_NAME)
 GIT_USER_EMAIL       = "developer@example.com" unless defined?(GIT_USER_EMAIL)
+DOTFILES_REPO        = "git@github.com:your-username/dotfiles.git" unless defined?(DOTFILES_REPO)
 
 # ==============================================================================
 # 2. NETWORK CONFIGURATION
@@ -162,18 +162,7 @@ Vagrant.configure("2") do |config|
     sudo apt-get update && sudo apt-get install -y \
       vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common keychain
 
-    # 3. Node.js Installation (Only if not already installed)
-    if ! command -v node &>/dev/null; then
-      echo "Installing Node.js #{NODE_VERSION}..."
-      curl -fsSL https://deb.nodesource.com/setup_#{NODE_VERSION}.x | sudo -E bash -
-      sudo apt-get install -y nodejs
-      echo "Updating npm to the latest version..."
-      sudo npm install -g npm@latest
-    else
-      echo "Node.js $(node -v) is already installed."
-    fi
-
-    # 4. User Creation
+    # 3. User Creation
     if ! id #{USERNAME} &>/dev/null; then
       echo "Creating user #{USERNAME}..."
       sudo useradd -m -s /bin/bash -G sudo #{USERNAME}
@@ -185,7 +174,23 @@ Vagrant.configure("2") do |config|
       echo "User #{USERNAME} already exists."
     fi
 
-    # 5. Antigravity CLI Installation (Ensure it is present)
+    # 4. nvm Installation (Only if not already installed)
+    if [ ! -d "/home/#{USERNAME}/.nvm" ]; then
+      echo "Installing nvm..."
+      sudo -u #{USERNAME} -i bash -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash'
+    else
+      echo "nvm is already installed."
+    fi
+
+    # 5. SDKMAN Installation (Only if not already installed)
+    if [ ! -d "/home/#{USERNAME}/.sdkman" ]; then
+      echo "Installing SDKMAN..."
+      sudo -u #{USERNAME} -i bash -c 'curl -s "https://get.sdkman.io" | bash'
+    else
+      echo "SDKMAN is already installed."
+    fi
+
+    # 6. Antigravity CLI Installation (Ensure it is present)
     if ! sudo -u #{USERNAME} -i command -v agy &>/dev/null; then
       echo "Installing Antigravity CLI (agy) for #{USERNAME}..."
       sudo -u #{USERNAME} -i bash -c "curl -fsSL https://antigravity.google/cli/install.sh | bash"
@@ -193,7 +198,7 @@ Vagrant.configure("2") do |config|
       echo "Antigravity CLI (agy) is already installed."
     fi
 
-    # 6. Claude Code Installation
+    # 7. Claude Code Installation
     if ! sudo -u #{USERNAME} -i command -v claude &>/dev/null; then
       echo "Installing Claude Code for #{USERNAME}..."
       sudo -u #{USERNAME} -i bash -c "curl -fsSL https://claude.ai/install.sh | bash"
@@ -201,7 +206,7 @@ Vagrant.configure("2") do |config|
       echo "Claude Code is already installed."
     fi
 
-    # 7. SSH Credentials Configuration
+    # 8. SSH Credentials Configuration
     # Setup public key
     if [ -n "#{VM_SSH_PUB_KEY}" ]; then
       echo "Setting up SSH key for #{USERNAME}..."
@@ -214,7 +219,7 @@ Vagrant.configure("2") do |config|
       chown -R #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh
     fi
  
-    # Setup private key for Git / Bitbucket access
+    # Setup private key for Git access
     if [ -n "#{VM_GIT_PRIV_KEY}" ]; then
       echo "Setting up private key for #{USERNAME}..."
       mkdir -p /home/#{USERNAME}/.ssh
@@ -230,12 +235,31 @@ Vagrant.configure("2") do |config|
       fi
     fi
 
-    # 8. Git Global Configuration
+    # 9. Apply Dotfiles (chezmoi)
+    if [ -n "#{VM_GIT_PRIV_KEY}" ]; then
+      echo "Applying dotfiles via chezmoi..."
+
+      if ! grep -q "^github.com" /home/#{USERNAME}/.ssh/known_hosts 2>/dev/null; then
+        ssh-keyscan -t ed25519 github.com >> /home/#{USERNAME}/.ssh/known_hosts 2>/dev/null
+        chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/known_hosts
+        chmod 600 /home/#{USERNAME}/.ssh/known_hosts
+      fi
+
+      if sudo -u #{USERNAME} -i command -v chezmoi &>/dev/null; then
+        echo "chezmoi already installed, pulling latest dotfiles..."
+        sudo -u #{USERNAME} -i bash -c 'chezmoi update --apply'
+      else
+        echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
+        sudo -u #{USERNAME} -i bash -c 'sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
+      fi
+    fi
+
+    # 10. Git Global Configuration
     echo "Configuring Git global user details..."
     sudo -u #{USERNAME} -i git config --global user.name "#{GIT_USER_NAME}"
     sudo -u #{USERNAME} -i git config --global user.email "#{GIT_USER_EMAIL}"
 
-    # 9. Configure Keychain for SSH Agent (to avoid typing passphrase multiple times)
+    # 11. Configure Keychain for SSH Agent (to avoid typing passphrase multiple times)
     echo "Configuring Keychain for SSH Agent..."
     KEYCHAIN_CONFIG='
 # Keychain setup to manage ssh-agent and passphrase

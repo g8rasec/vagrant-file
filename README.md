@@ -9,7 +9,7 @@ This repository contains an automated Vagrant configuration to set up a developm
 * **Idempotent Provisioning**: Automated and fast package installation that skips already-installed tools to save time.
 * **SSH Key Integration**: Automatically injects host SSH keys into the VM for passwordless access (without crashing if keys are missing on the host).
 * **Pre-installed Tools**:
-  * Node.js (version 24 by default) and the latest npm.
+  * `nvm` and `SDKMAN` (Node.js and Java/Maven are installed on demand — see [Language Versions](#language-versions-nvm--sdkman)).
   * Antigravity CLI (`agy`).
   * Utilities: Vim, Zsh, Htop, Curl, Nmap, Net-tools, etc.
 
@@ -83,6 +83,29 @@ You can customize the VM by modifying the configuration variables at the top of 
 * `VM_PRIVATE_IP`: The static IP used in `"private"` mode (default: `192.168.56.10`).
 * `VM_PUBLIC_IP`: The static IP used in `"public_static"` mode (default: `10.202.92.202`).
 * `NETWORK_INTERFACE_PREFIX`: The prefix of your host's physical network interface for Bridge modes (e.g., `"wlp"` for Wi-Fi, `"en"` for ethernet).
+
+---
+
+## Language Versions (nvm / SDKMAN)
+
+The `Vagrantfile` does **not** pin a Node.js or Java version — it only installs the version managers (`nvm` and `SDKMAN`) into the VM. Pick and install whatever version each project needs after connecting:
+
+### Node.js (via nvm)
+```bash
+nvm install 24         # or: nvm install --lts / nvm install node (latest)
+nvm use 24
+nvm alias default 24   # makes it the default for new shells
+```
+
+### Java / Maven (via SDKMAN)
+```bash
+sdk list java                    # see available candidates/vendors
+sdk install java 17.0.13-tem
+sdk default java 17.0.13-tem
+sdk install maven                # Maven is also managed by SDKMAN, not apt
+```
+
+These installs live in `~/.nvm` and `~/.sdkman`, so they survive `vagrant provision` re-runs (the provisioning script only installs the managers themselves, and only if missing).
 
 ---
 
