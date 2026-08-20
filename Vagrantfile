@@ -228,6 +228,28 @@ Vagrant.configure("2") do |config|
       fi
     fi
 
+    # 6. AI CLI Tools (VM-only, not part of dotfiles)
+    if ! sudo -u #{USERNAME} -i command -v agy &>/dev/null; then
+      echo "Installing Antigravity CLI (agy) for #{USERNAME}..."
+      sudo -u #{USERNAME} -i bash -c "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+    else
+      echo "Antigravity CLI (agy) is already installed."
+    fi
+
+    if ! sudo -u #{USERNAME} -i command -v claude &>/dev/null; then
+      echo "Installing Claude Code for #{USERNAME}..."
+      sudo -u #{USERNAME} -i bash -c "curl -fsSL https://claude.ai/install.sh | bash"
+    else
+      echo "Claude Code is already installed."
+    fi
+
+    if ! sudo -u #{USERNAME} -i command -v codex &>/dev/null; then
+      echo "Installing Codex CLI for #{USERNAME}..."
+      sudo -u #{USERNAME} -i bash -c "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+    else
+      echo "Codex CLI is already installed."
+    fi
+
   SHELL
 end
 
