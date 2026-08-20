@@ -19,8 +19,6 @@ PASSWORD         = "pass" unless defined?(PASSWORD)
 SSH_KEY_FILENAME     = "id_ed25519" unless defined?(SSH_KEY_FILENAME)             # host key authorized to SSH INTO the VM
 VM_GIT_KEY_FILENAME  = "id_ed25519_readonly" unless defined?(VM_GIT_KEY_FILENAME) # read-only key placed INSIDE the VM for Git access
 DISK_SIZE            = "100GB" unless defined?(DISK_SIZE)
-GIT_USER_NAME        = "Developer" unless defined?(GIT_USER_NAME)
-GIT_USER_EMAIL       = "developer@example.com" unless defined?(GIT_USER_EMAIL)
 DOTFILES_REPO        = "git@github.com:your-username/dotfiles.git" unless defined?(DOTFILES_REPO)
 
 # ==============================================================================
@@ -259,11 +257,6 @@ Vagrant.configure("2") do |config|
         sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
       fi
     fi
-
-    # 10. Git Global Configuration
-    echo "Configuring Git global user details..."
-    sudo -u #{USERNAME} -i git config --global user.name "#{GIT_USER_NAME}"
-    sudo -u #{USERNAME} -i git config --global user.email "#{GIT_USER_EMAIL}"
 
   SHELL
 end
