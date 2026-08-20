@@ -223,15 +223,15 @@ Vagrant.configure("2") do |config|
     if [ -n "#{VM_GIT_PRIV_KEY}" ]; then
       echo "Setting up private key for #{USERNAME}..."
       mkdir -p /home/#{USERNAME}/.ssh
-      echo "#{VM_GIT_PRIV_KEY}" > /home/#{USERNAME}/.ssh/id_ed25519
-      chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/id_ed25519
-      chmod 600 /home/#{USERNAME}/.ssh/id_ed25519
-      
+      echo "#{VM_GIT_PRIV_KEY}" > /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}
+      chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}
+      chmod 600 /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}
+
       if [ -n "#{VM_GIT_PUB_KEY}" ]; then
         echo "Setting up matching public key for #{USERNAME}..."
-        echo "#{VM_GIT_PUB_KEY}" > /home/#{USERNAME}/.ssh/id_ed25519.pub
-        chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/id_ed25519.pub
-        chmod 644 /home/#{USERNAME}/.ssh/id_ed25519.pub
+        echo "#{VM_GIT_PUB_KEY}" > /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}.pub
+        chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}.pub
+        chmod 644 /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}.pub
       fi
     fi
 
@@ -253,10 +253,10 @@ Vagrant.configure("2") do |config|
 
       if [ -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
         echo "chezmoi source already present, pulling latest dotfiles..."
-        sudo -u #{USERNAME} -i bash -c 'chezmoi update --apply'
+        sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" chezmoi update --apply'
       else
         echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
-        sudo -u #{USERNAME} -i bash -c 'sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
+        sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
       fi
     fi
 
