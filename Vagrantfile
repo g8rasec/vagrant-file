@@ -163,7 +163,7 @@ Vagrant.configure("2") do |config|
     # 3. User Creation
     if ! id #{USERNAME} &>/dev/null; then
       echo "Creating user #{USERNAME}..."
-      sudo useradd -m -s /bin/bash -G sudo #{USERNAME}
+      sudo useradd -m -s /usr/bin/zsh -G sudo #{USERNAME}
       echo "#{USERNAME}:#{PASSWORD}" | sudo chpasswd
       echo "Copying default profiles..."
       sudo -u #{USERNAME} cp /etc/skel/.bashrc /home/#{USERNAME}/.bashrc
