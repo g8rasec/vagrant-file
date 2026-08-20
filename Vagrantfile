@@ -155,10 +155,12 @@ Vagrant.configure("2") do |config|
     fi
     sudo systemctl restart sshd
    
-    # 2. Package Installation
-    echo "Installing base packages..."
-    sudo apt-get update && sudo apt-get install -y \
-      vim zsh wget curl net-tools htop nmap apt-transport-https ca-certificates software-properties-common unzip zip
+    # 2. Bootstrap Package Installation
+    # Only what's strictly required before the user exists and dotfiles can
+    # take over: zsh (login shell), curl+ca-certificates (fetch chezmoi
+    # itself). Everything else lives in the dotfiles repo's run_once scripts.
+    echo "Installing bootstrap packages..."
+    sudo apt-get update && sudo apt-get install -y zsh curl ca-certificates
 
     # 3. User Creation
     if ! id #{USERNAME} &>/dev/null; then
@@ -172,39 +174,7 @@ Vagrant.configure("2") do |config|
       echo "User #{USERNAME} already exists."
     fi
 
-    # 4. nvm Installation (Only if not already installed)
-    if [ ! -d "/home/#{USERNAME}/.nvm" ]; then
-      echo "Installing nvm..."
-      sudo -u #{USERNAME} -i bash -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash'
-    else
-      echo "nvm is already installed."
-    fi
-
-    # 5. SDKMAN Installation (Only if not already installed)
-    if [ ! -d "/home/#{USERNAME}/.sdkman" ]; then
-      echo "Installing SDKMAN..."
-      sudo -u #{USERNAME} -i bash -c 'curl -s "https://get.sdkman.io" | bash'
-    else
-      echo "SDKMAN is already installed."
-    fi
-
-    # 6. Antigravity CLI Installation (Ensure it is present)
-    if ! sudo -u #{USERNAME} -i command -v agy &>/dev/null; then
-      echo "Installing Antigravity CLI (agy) for #{USERNAME}..."
-      sudo -u #{USERNAME} -i bash -c "curl -fsSL https://antigravity.google/cli/install.sh | bash"
-    else
-      echo "Antigravity CLI (agy) is already installed."
-    fi
-
-    # 7. Claude Code Installation
-    if ! sudo -u #{USERNAME} -i command -v claude &>/dev/null; then
-      echo "Installing Claude Code for #{USERNAME}..."
-      sudo -u #{USERNAME} -i bash -c "curl -fsSL https://claude.ai/install.sh | bash"
-    else
-      echo "Claude Code is already installed."
-    fi
-
-    # 8. SSH Credentials Configuration
+    # 4. SSH Credentials Configuration
     # Setup public key
     if [ -n "#{VM_SSH_PUB_KEY}" ]; then
       echo "Setting up SSH key for #{USERNAME}..."
@@ -233,7 +203,7 @@ Vagrant.configure("2") do |config|
       fi
     fi
 
-    # 9. Apply Dotfiles (chezmoi)
+    # 5. Apply Dotfiles (chezmoi)
     if [ -n "#{VM_GIT_PRIV_KEY}" ]; then
       echo "Applying dotfiles via chezmoi..."
 
