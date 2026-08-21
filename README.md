@@ -10,15 +10,32 @@ This repository contains an automated Vagrant configuration to set up a developm
 * **SSH Key Integration**: Automatically injects host SSH keys into the VM for passwordless access (without crashing if keys are missing on the host).
 * **Pre-installed Tools**:
   * `nvm` and `SDKMAN` (Node.js and Java/Maven are installed on demand — see [Language Versions](#language-versions-nvm--sdkman)).
-  * Antigravity CLI (`agy`).
+  * AI CLIs: Antigravity (`agy`), Claude Code (`claude`), Codex CLI (`codex`).
   * Utilities: Vim, Zsh, Htop, Curl, Nmap, Net-tools, etc.
 
 ---
 
 ## Prerequisites
-Before starting, ensure you have the following installed on your host machine:
-1. **VirtualBox** 7.0
-2. **Vagrant** 2.4.2
+Before starting, ensure you have the following installed on your host machine (both installed via `apt`):
+
+1. **VirtualBox** 7.0.26 — `virtualbox-7.0` isn't in Ubuntu's default repos, so add the [Oracle apt repo](https://www.virtualbox.org/wiki/Linux_Downloads) first:
+   ```bash
+   wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/oracle-virtualbox-2016.gpg
+   echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] https://download.virtualbox.org/virtualbox/debian jammy contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
+   sudo apt update
+   sudo apt install virtualbox-7.0
+   ```
+
+2. **Vagrant** 2.4.9 — same story with the [HashiCorp apt repo](https://developer.hashicorp.com/vagrant/install):
+   ```bash
+   wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor --yes --output /usr/share/keyrings/hashicorp-archive-keyring.gpg
+   echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com jammy main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+   sudo apt update
+   sudo apt install vagrant
+   ```
+
+   > These version numbers were the latest available in each repo as of August 2026 — a plain `apt install` currently lands on them exactly, but isn't pinned. A newer release in either repo will install ahead of the reference version instead of matching it; pin the package (e.g. `apt install vagrant=2.4.9-1`) if exact parity matters, keeping in mind these repos typically only keep the latest build available under that exact version string.
+
 3. An SSH key generated at `~/.ssh/id_ed25519` (the script will automatically inject it for passwordless access).
 
 ---
@@ -88,13 +105,18 @@ You can customize the VM by modifying the configuration variables at the top of 
 
 ## Language Versions (nvm / SDKMAN)
 
-The `Vagrantfile` does **not** pin a Node.js or Java version — it only installs the version managers (`nvm` and `SDKMAN`) into the VM. Pick and install whatever version each project needs after connecting:
+The `Vagrantfile` does **not** pin a Node.js or Java version — it only installs the version managers (`nvm` and `SDKMAN`) into the VM. Pick and install whatever version each project needs after connecting.
 
 ### Node.js (via nvm)
 ```bash
 nvm install 24         # or: nvm install --lts / nvm install node (latest)
 nvm use 24
 nvm alias default 24   # makes it the default for new shells
+```
+**Pinned versions** (`nvm` 0.40.1, Node **v22.14.0**, npm **10.9.2**):
+```bash
+nvm install 22.14.0
+nvm alias default 22.14.0
 ```
 
 ### Java / Maven (via SDKMAN)
@@ -103,6 +125,11 @@ sdk list java                    # see available candidates/vendors
 sdk install java 17.0.13-tem
 sdk default java 17.0.13-tem
 sdk install maven                # Maven is also managed by SDKMAN, not apt
+```
+**Pinned versions** (Java **17.0.19**, Maven **3.6.3**):
+```bash
+sdk install java 17.0.19-tem
+sdk install maven 3.6.3
 ```
 
 These installs live in `~/.nvm` and `~/.sdkman`, so they survive `vagrant provision` re-runs (the provisioning script only installs the managers themselves, and only if missing).

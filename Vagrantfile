@@ -18,7 +18,7 @@ USERNAME         = "user" unless defined?(USERNAME)
 PASSWORD         = "pass" unless defined?(PASSWORD)
 SSH_KEY_FILENAME     = "id_ed25519" unless defined?(SSH_KEY_FILENAME)             # host key authorized to SSH INTO the VM
 VM_GIT_KEY_FILENAME  = "id_ed25519_readonly" unless defined?(VM_GIT_KEY_FILENAME) # read-only key placed INSIDE the VM for Git access
-DISK_SIZE            = "100GB" unless defined?(DISK_SIZE)
+DISK_SIZE            = "50GB" unless defined?(DISK_SIZE)
 DOTFILES_REPO        = "git@github.com:your-username/dotfiles.git" unless defined?(DOTFILES_REPO)
 
 # ==============================================================================
@@ -207,6 +207,14 @@ Vagrant.configure("2") do |config|
     if [ -n "#{VM_GIT_PRIV_KEY}" ]; then
       echo "Applying dotfiles via chezmoi..."
 
+      # Grant #{USERNAME} passwordless sudo only for this step: the dotfiles repo's
+      # run_once scripts call plain "sudo apt-get install" internally, and this whole
+      # provisioner runs non-interactively with no TTY, so sudo can't prompt for a
+      # password here. Revoked immediately after chezmoi finishes, below — every other
+      # step (AI CLI installs, interactive `vagrant ssh` sessions) never needs this.
+      echo "#{USERNAME} ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/90-#{USERNAME}-nopasswd > /dev/null
+      sudo chmod 440 /etc/sudoers.d/90-#{USERNAME}-nopasswd
+
       if ! grep -q "^github.com" /home/#{USERNAME}/.ssh/known_hosts 2>/dev/null; then
         ssh-keyscan -t ed25519 github.com >> /home/#{USERNAME}/.ssh/known_hosts 2>/dev/null
         chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/known_hosts
@@ -221,11 +229,15 @@ Vagrant.configure("2") do |config|
 
       if [ -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
         echo "chezmoi source already present, pulling latest dotfiles..."
-        sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" chezmoi update --apply'
+        sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" ~/.local/bin/chezmoi update --apply'
       else
         echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
         sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
       fi
+
+      # Revoke passwordless sudo now that chezmoi (and any apt installs it triggered) is done.
+      echo "Revoking passwordless sudo for #{USERNAME}..."
+      sudo rm -f /etc/sudoers.d/90-#{USERNAME}-nopasswd
     fi
 
     # 6. AI CLI Tools (VM-only, not part of dotfiles)
