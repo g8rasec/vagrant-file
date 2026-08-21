@@ -12,8 +12,8 @@ load "#{__dir__}/Vagrantfile.local" if File.exist?("#{__dir__}/Vagrantfile.local
 # ==============================================================================
 BOX_IMAGE        = "ubuntu/jammy64" unless defined?(BOX_IMAGE)
 PROJECT          = "dev-project" unless defined?(PROJECT)
-CPUs             = 8 unless defined?(CPUs)
-MEMORY           = "15890" unless defined?(MEMORY)
+CPUs             = 2 unless defined?(CPUs)
+MEMORY           = "8192" unless defined?(MEMORY)
 USERNAME         = "user" unless defined?(USERNAME)
 PASSWORD         = "pass" unless defined?(PASSWORD)
 SSH_KEY_FILENAME     = "id_ed25519" unless defined?(SSH_KEY_FILENAME)             # host key authorized to SSH INTO the VM
