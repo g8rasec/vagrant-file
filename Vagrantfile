@@ -229,7 +229,12 @@ Vagrant.configure("2") do |config|
 
       if [ -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
         echo "chezmoi source already present, pulling latest dotfiles..."
-        sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" ~/.local/bin/chezmoi update --apply'
+        # --force: this runs with no TTY, so if a managed file (e.g. .zshrc) was
+        # touched outside chezmoi since the last apply — the AI CLI installers below
+        # append PATH lines to it — chezmoi would otherwise try to prompt on /dev/tty,
+        # fail to open it, and abort before running the run_once_after scripts. Since
+        # this VM is disposable/reproducible, the dotfiles state should always win.
+        sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" ~/.local/bin/chezmoi update --apply --force'
       else
         echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
         sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
