@@ -30,7 +30,7 @@ DOTFILES_REPO        = "git@github.com:your-username/dotfiles.git" unless define
 # - "public_dhcp"   : Bridge with DHCP (dynamic IP from router)
 NETWORK_MODE             = "private" unless defined?(NETWORK_MODE)
 VM_PRIVATE_IP            = "192.168.56.10" unless defined?(VM_PRIVATE_IP)
-VM_BRIDGED_IP            = "172.23.11.200" unless defined?(VM_BRIDGED_IP)
+VM_BRIDGED_IP            = "192.168.15.10" unless defined?(VM_BRIDGED_IP)
 
 # Interface prefix to auto-detect the host network card for bridged networking:
 # - "en" or "eth"   : Wired Ethernet interfaces (e.g., enp1s0, eth0)
