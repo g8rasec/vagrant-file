@@ -1,6 +1,8 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+require "fileutils"
+
 # Enable Vagrant's built-in disk management (no plugin required)
 ENV["VAGRANT_EXPERIMENTAL"] = "disks"
 
@@ -78,6 +80,28 @@ GATEWAY_NETWORK = if NETWORK_MODE.start_with?("public")
                     "N/A (Private Network)"
                   end
 
+# ==============================================================================
+# 5. HOST TERMINFO SYNC
+# ==============================================================================
+# Captures the host's current $TERM terminfo entry so it can be installed on
+# the guest. Without this, SSH clients using a TERM the guest doesn't know
+# about (e.g. xterm-ghostty on older distros) get garbled/duplicated input,
+# because cursor-control sequences from the shell prompt can't be resolved.
+HOST_TERM = ENV["TERM"]
+HOST_TERMINFO_PATH = "#{__dir__}/.vagrant/host-terminfo.terminfo"
+
+if HOST_TERM
+  FileUtils.mkdir_p("#{__dir__}/.vagrant")
+  if system("infocmp -x #{HOST_TERM} > #{HOST_TERMINFO_PATH} 2>/dev/null")
+    puts "Captured host TERM='#{HOST_TERM}' terminfo for guest sync."
+  else
+    HOST_TERMINFO_PATH = nil
+    puts "Could not capture host TERM='#{HOST_TERM}' terminfo (infocmp unavailable or unknown to host too)."
+  end
+else
+  HOST_TERMINFO_PATH = nil
+end
+
 puts "=============================================================================="
 puts "Configurations set:"
 puts "  BOX_IMAGE:        #{BOX_IMAGE}"
@@ -103,7 +127,7 @@ end
 puts "=============================================================================="
 
 # ==============================================================================
-# 5. VAGRANT CONFIGURATION
+# 6. VAGRANT CONFIGURATION
 # ==============================================================================
 Vagrant.configure("2") do |config|
   puts "Configuring Vagrant..."
@@ -117,7 +141,17 @@ Vagrant.configure("2") do |config|
     # Share the host's ~/repos into the VM for repos cloned (and pushed) from the
     # host via SSH. Git network access for these repos never happens inside the
     # VM itself — only the resulting working tree is visible here.
-    host.vm.synced_folder "~/repos", "/home/#{USERNAME}/repos", owner: USERNAME, group: USERNAME, create: true
+    #
+    # uid/gid=1000: placeholder only. Synced folders are mounted before the
+    # shell provisioner creates USERNAME, so owner:/group: can't be used
+    # (Vagrant would run `id -u` on a user that doesn't exist yet) and the
+    # real UID/GID can't be known here on the host. It also isn't reliably
+    # 1000 on the guest: official Canonical boxes already have "vagrant"
+    # (1000) and cloud-init's default "ubuntu" user (1001) before useradd
+    # ever runs, so USERNAME can land on 1002 or higher. The provisioner
+    # below detects the real UID/GID after creating USERNAME and remounts
+    # this share with the correct values.
+    host.vm.synced_folder "~/repos", "/home/#{USERNAME}/repos", create: true, mount_options: ["uid=1000", "gid=1000"]
 
     # Apply network configuration based on mode
     case NETWORK_MODE
@@ -145,6 +179,12 @@ Vagrant.configure("2") do |config|
     vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
   end
 
+  # Sync host terminfo (see section 5 above) so SSH from the host's terminal
+  # doesn't get garbled input if the guest doesn't recognize the host's TERM.
+  if HOST_TERMINFO_PATH
+    config.vm.provision "file", source: HOST_TERMINFO_PATH, destination: "/tmp/host.terminfo"
+  end
+
   # Shell Provisioning
   config.vm.provision "shell", inline: <<-SHELL
     echo "Starting shell provisioning..."
@@ -162,20 +202,63 @@ Vagrant.configure("2") do |config|
     # 2. Bootstrap Package Installation
     # Only what's strictly required before the user exists and dotfiles can
     # take over: zsh (login shell), curl+ca-certificates (fetch chezmoi
-    # itself). Everything else lives in the dotfiles repo's run_once scripts.
+    # itself), ncurses-term (terminfo entries for common terminal emulators).
+    # Everything else lives in the dotfiles repo's run_once scripts.
     echo "Installing bootstrap packages..."
-    sudo apt-get update && sudo apt-get install -y zsh curl ca-certificates
+    sudo apt-get update && sudo apt-get install -y zsh curl ca-certificates ncurses-term
 
     # 3. User Creation
     if ! id #{USERNAME} &>/dev/null; then
       echo "Creating user #{USERNAME}..."
       sudo useradd -m -s /usr/bin/zsh -G sudo #{USERNAME}
       echo "#{USERNAME}:#{PASSWORD}" | sudo chpasswd
+
+      # useradd -m finds /home/#{USERNAME} already existing (created by root
+      # by Vagrant as the mountpoint for the repos synced folder, before this
+      # provisioner runs) and refuses to change its ownership or copy skel
+      # files into it. Fix the home dir's ownership here — NOT recursive,
+      # since /home/#{USERNAME}/repos is a separate vboxsf mount, fixed up
+      # on its own in step 3.1 below.
+      sudo chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}
+
       echo "Copying default profiles..."
       sudo -u #{USERNAME} cp /etc/skel/.bashrc /home/#{USERNAME}/.bashrc
       sudo -u #{USERNAME} cp /etc/skel/.profile /home/#{USERNAME}/.profile
     else
       echo "User #{USERNAME} already exists."
+    fi
+
+    # 3.1. Fix Repos Synced-Folder Ownership
+    # The synced_folder mount_options in the Vagrantfile use a static
+    # placeholder uid/gid=1000, since Vagrant mounts it before #{USERNAME}
+    # exists and the real UID/GID depends on which regular users the box
+    # already ships with (e.g. "vagrant", and cloud-init's default "ubuntu"
+    # user on official Canonical images) — so it isn't always 1000. Now that
+    # #{USERNAME} exists, detect its real UID/GID and remount with the
+    # correct values if they don't already match.
+    REPOS_MOUNT="/home/#{USERNAME}/repos"
+    REAL_UID=$(id -u #{USERNAME})
+    REAL_GID=$(id -g #{USERNAME})
+    # vboxsf never surfaces uid=/gid= in /proc/mounts (findmnt -o OPTIONS comes back
+    # empty for them), so read the mapped owner off the mount point itself instead.
+    CURRENT_UID=$(stat -c '%u' "$REPOS_MOUNT" 2>/dev/null)
+    if [ -n "$CURRENT_UID" ] && [ "$CURRENT_UID" != "$REAL_UID" ]; then
+      SHARE_NAME=$(awk -v mnt="$REPOS_MOUNT" '$2 == mnt {print $1}' /etc/fstab)
+      echo "Remounting $REPOS_MOUNT with uid=$REAL_UID,gid=$REAL_GID (was uid=$CURRENT_UID) for #{USERNAME}..."
+      sudo umount "$REPOS_MOUNT"
+      sudo mount -t vboxsf -o uid=$REAL_UID,gid=$REAL_GID "$SHARE_NAME" "$REPOS_MOUNT"
+      sudo sed -i -E "\\|$REPOS_MOUNT|s/uid=[0-9]+,gid=[0-9]+/uid=$REAL_UID,gid=$REAL_GID/" /etc/fstab
+    fi
+
+    # 3.5. Host Terminfo Installation
+    # Installs the host's TERM terminfo (copied in by the "file" provisioner
+    # above, see section 5) into #{USERNAME}'s own ~/.terminfo, so SSH
+    # sessions from the host's terminal emulator (e.g. Ghostty) don't get
+    # garbled/duplicated input from unresolved cursor-control sequences.
+    if [ -f /tmp/host.terminfo ]; then
+      echo "Installing host terminfo for #{USERNAME}..."
+      sudo -u #{USERNAME} -i tic -x /tmp/host.terminfo
+      rm -f /tmp/host.terminfo
     fi
 
     # 4. SSH Credentials Configuration
