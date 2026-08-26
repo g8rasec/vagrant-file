@@ -38,6 +38,13 @@ Before starting, ensure you have the following installed on your host machine (b
 
 3. An SSH key generated at `~/.ssh/id_ed25519` (the script will automatically inject it for passwordless access).
 
+4. *(Optional, for dotfiles via chezmoi)* A GitHub **fine-grained Personal Access Token** with **read-only** access, saved as plain text at `~/.ssh/github_pat_readonly`:
+   ```bash
+   echo -n "your-token-here" > ~/.ssh/github_pat_readonly
+   chmod 600 ~/.ssh/github_pat_readonly
+   ```
+   Generate one at GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens**, scoped to the repositories you need (e.g. your dotfiles repo) with **Contents: Read-only** permission. Unlike a per-repo Deploy Key, a single token can cover multiple repositories. The VM only ever gets read access this way — see [Git Push via SSH Agent Forwarding](#git-push-via-ssh-agent-forwarding) for how to push from inside the VM.
+
 ---
 
 ## Network Modes (NETWORK_MODE)
@@ -100,6 +107,8 @@ You can customize the VM by modifying the configuration variables at the top of 
 * `VM_PRIVATE_IP`: The static IP used in `"private"` mode (default: `192.168.56.10`).
 * `VM_PUBLIC_IP`: The static IP used in `"public_static"` mode (default: `10.202.92.202`).
 * `NETWORK_INTERFACE_PREFIX`: The prefix of your host's physical network interface for Bridge modes (e.g., `"wlp"` for Wi-Fi, `"en"` for ethernet).
+* `DOTFILES_REPO`: The HTTPS URL of your dotfiles repo, applied via `chezmoi` on first boot (default: `"https://github.com/your-username/dotfiles.git"`). Requires the PAT from [Prerequisites](#prerequisites) to be set up, otherwise this step is skipped.
+* `VM_GIT_PAT_FILENAME`: The filename (inside `~/.ssh` on your **host**) holding the read-only GitHub PAT (default: `"github_pat_readonly"`).
 
 ---
 
@@ -153,7 +162,7 @@ alias vm-destroy='cd ~/repos/vagrant-file && vagrant destroy && cd -'
 
 ## Git Push via SSH Agent Forwarding
 
-Since the private key configured inside the VM (`id_ed25519_readonly`) only has **read-only** access for safety, you cannot run `git push` directly from the VM using it.
+The VM only ever gets **read-only** Git access: the GitHub PAT injected from `~/.ssh/github_pat_readonly` on your host (see [Prerequisites](#prerequisites)) is scoped to `Contents: Read-only`, so `git clone`/`git pull` work for any repo the token covers, but `git push` from inside the VM will always be rejected.
 
 To perform write operations (like `git push`) from the VM, you can temporarily forward your host's SSH agent (which holds your write-access private key) to the VM during your SSH session:
 
@@ -164,9 +173,10 @@ ssh -A user@192.168.56.10
 ```
 *(Or if you configured the SSH alias: `ssh -A vm-ubuntu`)*
 
-### 2. Run Git push inside the VM
-During this SSH session, the VM will have temporary access to the SSH keys loaded in your host's SSH agent:
+### 2. Point the push URL at SSH, then push
+The PAT only authenticates HTTPS reads, so a repo cloned via `chezmoi`/HTTPS needs its push URL switched to SSH once, per clone:
 ```bash
+git remote set-url --push origin git@github.com:your-username/your-repo.git
 git push origin feature/my-branch
 ```
 
@@ -177,4 +187,3 @@ Once you close the connection (`exit`), the VM completely loses access to your h
 * **No key copying**: Your host's write-access private key is never copied or saved inside the VM. It remains safely on your physical machine.
 * **On-demand signing**: The VM acts as a proxy, forwarding authentication challenges back to your host's active `ssh-agent` to be signed.
 * **Temporary bridge**: The connection to your host's agent is active only for the duration of the SSH session. As soon as you disconnect, the VM loses all authentication capabilities.
-

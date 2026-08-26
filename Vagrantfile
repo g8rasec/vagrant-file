@@ -17,14 +17,14 @@ MEMORY           = "8192" unless defined?(MEMORY)
 USERNAME         = "user" unless defined?(USERNAME)
 PASSWORD         = "pass" unless defined?(PASSWORD)
 SSH_KEY_FILENAME     = "id_ed25519" unless defined?(SSH_KEY_FILENAME)             # host key authorized to SSH INTO the VM
-VM_GIT_KEY_FILENAME  = "id_ed25519_readonly" unless defined?(VM_GIT_KEY_FILENAME) # read-only key placed INSIDE the VM for Git access
+VM_GIT_PAT_FILENAME  = "github_pat_readonly" unless defined?(VM_GIT_PAT_FILENAME) # host file with a read-only GitHub fine-grained PAT, for HTTPS Git access inside the VM
 DISK_SIZE            = "50GB" unless defined?(DISK_SIZE)
-DOTFILES_REPO        = "git@github.com:your-username/dotfiles.git" unless defined?(DOTFILES_REPO)
+DOTFILES_REPO        = "https://github.com/your-username/dotfiles.git" unless defined?(DOTFILES_REPO)
 
 # ==============================================================================
 # 2. NETWORK CONFIGURATION
 # ==============================================================================
-# Network mode: 
+# Network mode:
 # - "private"       : Host-Only IP (always accessible via fixed IP from host)
 # - "public_static" : Bridge with static IP
 # - "public_dhcp"   : Bridge with DHCP (dynamic IP from router)
@@ -70,8 +70,7 @@ HOSTNAME  = "vm-" + BOX_IMAGE.split("/").first
 VM_NAME   = ("vm-" + BOX_IMAGE.split("/")[1] + "-" + PROJECT).upcase
 
 VM_SSH_PUB_KEY  = read_ssh_key(SSH_KEY_FILENAME, true)
-VM_GIT_PRIV_KEY = read_ssh_key(VM_GIT_KEY_FILENAME, false)
-VM_GIT_PUB_KEY  = read_ssh_key(VM_GIT_KEY_FILENAME, true)
+VM_GIT_PAT      = read_ssh_key(VM_GIT_PAT_FILENAME, false)
 
 GATEWAY_NETWORK = if NETWORK_MODE.start_with?("public")
                     `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
@@ -108,7 +107,7 @@ puts "==========================================================================
 # ==============================================================================
 Vagrant.configure("2") do |config|
   puts "Configuring Vagrant..."
-  
+
   config.vm.define VM_NAME do |host|
     puts "Defining VM: #{VM_NAME}"
     host.vm.box      = BOX_IMAGE
@@ -144,7 +143,7 @@ Vagrant.configure("2") do |config|
   # Shell Provisioning
   config.vm.provision "shell", inline: <<-SHELL
     echo "Starting shell provisioning..."
-    
+
     # 1. SSH Password Authentication
     echo "Enabling password authentication for SSH..."
     if [ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]; then
@@ -154,7 +153,7 @@ Vagrant.configure("2") do |config|
       sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
     fi
     sudo systemctl restart sshd
-   
+
     # 2. Bootstrap Package Installation
     # Only what's strictly required before the user exists and dotfiles can
     # take over: zsh (login shell), curl+ca-certificates (fetch chezmoi
@@ -186,25 +185,18 @@ Vagrant.configure("2") do |config|
       chmod 600 /home/#{USERNAME}/.ssh/authorized_keys
       chown -R #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh
     fi
- 
-    # Setup private key for Git access
-    if [ -n "#{VM_GIT_PRIV_KEY}" ]; then
-      echo "Setting up private key for #{USERNAME}..."
-      mkdir -p /home/#{USERNAME}/.ssh
-      echo "#{VM_GIT_PRIV_KEY}" > /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}
-      chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}
-      chmod 600 /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}
 
-      if [ -n "#{VM_GIT_PUB_KEY}" ]; then
-        echo "Setting up matching public key for #{USERNAME}..."
-        echo "#{VM_GIT_PUB_KEY}" > /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}.pub
-        chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}.pub
-        chmod 644 /home/#{USERNAME}/.ssh/#{VM_GIT_KEY_FILENAME}.pub
-      fi
+    # Setup read-only GitHub PAT for #{USERNAME} (HTTPS, covers any repo the token grants read access to)
+    if [ -n "#{VM_GIT_PAT}" ]; then
+      echo "Setting up read-only GitHub PAT for #{USERNAME}..."
+      sudo -u #{USERNAME} -i git config --global credential.helper store
+      echo "https://x-access-token:#{VM_GIT_PAT}@github.com" > /home/#{USERNAME}/.git-credentials
+      chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.git-credentials
+      chmod 600 /home/#{USERNAME}/.git-credentials
     fi
 
     # 5. Apply Dotfiles (chezmoi)
-    if [ -n "#{VM_GIT_PRIV_KEY}" ]; then
+    if [ -n "#{VM_GIT_PAT}" ]; then
       echo "Applying dotfiles via chezmoi..."
 
       # Grant #{USERNAME} passwordless sudo only for this step: the dotfiles repo's
@@ -215,13 +207,7 @@ Vagrant.configure("2") do |config|
       echo "#{USERNAME} ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/90-#{USERNAME}-nopasswd > /dev/null
       sudo chmod 440 /etc/sudoers.d/90-#{USERNAME}-nopasswd
 
-      if ! grep -q "^github.com" /home/#{USERNAME}/.ssh/known_hosts 2>/dev/null; then
-        ssh-keyscan -t ed25519 github.com >> /home/#{USERNAME}/.ssh/known_hosts 2>/dev/null
-        chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.ssh/known_hosts
-        chmod 600 /home/#{USERNAME}/.ssh/known_hosts
-      fi
-
-      # A previously failed clone (e.g. bad SSH auth) can leave an incomplete, non-git source dir behind
+      # A previously failed clone (e.g. bad auth) can leave an incomplete, non-git source dir behind
       if [ -d "/home/#{USERNAME}/.local/share/chezmoi" ] && [ ! -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
         echo "Removing incomplete chezmoi source directory from a previous failed attempt..."
         rm -rf "/home/#{USERNAME}/.local/share/chezmoi"
@@ -234,10 +220,10 @@ Vagrant.configure("2") do |config|
         # append PATH lines to it — chezmoi would otherwise try to prompt on /dev/tty,
         # fail to open it, and abort before running the run_once_after scripts. Since
         # this VM is disposable/reproducible, the dotfiles state should always win.
-        sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" ~/.local/bin/chezmoi update --apply --force'
+        sudo -u #{USERNAME} -i bash -c '~/.local/bin/chezmoi update --apply --force'
       else
         echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
-        sudo -u #{USERNAME} -i bash -c 'GIT_SSH_COMMAND="ssh -i ~/.ssh/#{VM_GIT_KEY_FILENAME} -o IdentitiesOnly=yes" sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
+        sudo -u #{USERNAME} -i bash -c 'sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
       fi
 
       # Revoke passwordless sudo now that chezmoi (and any apt installs it triggered) is done.
