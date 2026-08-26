@@ -74,6 +74,11 @@ VM_NAME   = ("vm-" + BOX_IMAGE.split("/")[1] + "-" + PROJECT).upcase
 VM_SSH_PUB_KEY  = read_ssh_key(SSH_KEY_FILENAME, true)
 VM_GIT_PAT      = read_ssh_key(VM_GIT_PAT_FILENAME, false)
 
+if VM_GIT_PAT.empty?
+  raise "Error: GitHub PAT not found at ~/.ssh/#{VM_GIT_PAT_FILENAME}. It's required to install and apply " \
+        "dotfiles (DOTFILES_REPO) via chezmoi on VM boot. See README Prerequisites for how to generate one."
+end
+
 GATEWAY_NETWORK = if NETWORK_MODE.start_with?("public")
                     `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
                   else
@@ -275,49 +280,45 @@ Vagrant.configure("2") do |config|
     fi
 
     # Setup read-only GitHub PAT for #{USERNAME} (HTTPS, covers any repo the token grants read access to)
-    if [ -n "#{VM_GIT_PAT}" ]; then
-      echo "Setting up read-only GitHub PAT for #{USERNAME}..."
-      sudo -u #{USERNAME} -i git config --global credential.helper store
-      echo "https://x-access-token:#{VM_GIT_PAT}@github.com" > /home/#{USERNAME}/.git-credentials
-      chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.git-credentials
-      chmod 600 /home/#{USERNAME}/.git-credentials
-    fi
+    echo "Setting up read-only GitHub PAT for #{USERNAME}..."
+    sudo -u #{USERNAME} -i git config --global credential.helper store
+    echo "https://x-access-token:#{VM_GIT_PAT}@github.com" > /home/#{USERNAME}/.git-credentials
+    chown #{USERNAME}:#{USERNAME} /home/#{USERNAME}/.git-credentials
+    chmod 600 /home/#{USERNAME}/.git-credentials
 
     # 5. Apply Dotfiles (chezmoi)
-    if [ -n "#{VM_GIT_PAT}" ]; then
-      echo "Applying dotfiles via chezmoi..."
+    echo "Applying dotfiles via chezmoi..."
 
-      # Grant #{USERNAME} passwordless sudo only for this step: the dotfiles repo's
-      # run_once scripts call plain "sudo apt-get install" internally, and this whole
-      # provisioner runs non-interactively with no TTY, so sudo can't prompt for a
-      # password here. Revoked immediately after chezmoi finishes, below — every other
-      # step (AI CLI installs, interactive `vagrant ssh` sessions) never needs this.
-      echo "#{USERNAME} ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/90-#{USERNAME}-nopasswd > /dev/null
-      sudo chmod 440 /etc/sudoers.d/90-#{USERNAME}-nopasswd
+    # Grant #{USERNAME} passwordless sudo only for this step: the dotfiles repo's
+    # run_once scripts call plain "sudo apt-get install" internally, and this whole
+    # provisioner runs non-interactively with no TTY, so sudo can't prompt for a
+    # password here. Revoked immediately after chezmoi finishes, below — every other
+    # step (AI CLI installs, interactive `vagrant ssh` sessions) never needs this.
+    echo "#{USERNAME} ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/90-#{USERNAME}-nopasswd > /dev/null
+    sudo chmod 440 /etc/sudoers.d/90-#{USERNAME}-nopasswd
 
-      # A previously failed clone (e.g. bad auth) can leave an incomplete, non-git source dir behind
-      if [ -d "/home/#{USERNAME}/.local/share/chezmoi" ] && [ ! -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
-        echo "Removing incomplete chezmoi source directory from a previous failed attempt..."
-        rm -rf "/home/#{USERNAME}/.local/share/chezmoi"
-      fi
-
-      if [ -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
-        echo "chezmoi source already present, pulling latest dotfiles..."
-        # --force: this runs with no TTY, so if a managed file (e.g. .zshrc) was
-        # touched outside chezmoi since the last apply — the AI CLI installers below
-        # append PATH lines to it — chezmoi would otherwise try to prompt on /dev/tty,
-        # fail to open it, and abort before running the run_once_after scripts. Since
-        # this VM is disposable/reproducible, the dotfiles state should always win.
-        sudo -u #{USERNAME} -i bash -c '~/.local/bin/chezmoi update --apply --force'
-      else
-        echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
-        sudo -u #{USERNAME} -i bash -c 'sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
-      fi
-
-      # Revoke passwordless sudo now that chezmoi (and any apt installs it triggered) is done.
-      echo "Revoking passwordless sudo for #{USERNAME}..."
-      sudo rm -f /etc/sudoers.d/90-#{USERNAME}-nopasswd
+    # A previously failed clone (e.g. bad auth) can leave an incomplete, non-git source dir behind
+    if [ -d "/home/#{USERNAME}/.local/share/chezmoi" ] && [ ! -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
+      echo "Removing incomplete chezmoi source directory from a previous failed attempt..."
+      rm -rf "/home/#{USERNAME}/.local/share/chezmoi"
     fi
+
+    if [ -d "/home/#{USERNAME}/.local/share/chezmoi/.git" ]; then
+      echo "chezmoi source already present, pulling latest dotfiles..."
+      # --force: this runs with no TTY, so if a managed file (e.g. .zshrc) was
+      # touched outside chezmoi since the last apply — the AI CLI installers below
+      # append PATH lines to it — chezmoi would otherwise try to prompt on /dev/tty,
+      # fail to open it, and abort before running the run_once_after scripts. Since
+      # this VM is disposable/reproducible, the dotfiles state should always win.
+      sudo -u #{USERNAME} -i bash -c '~/.local/bin/chezmoi update --apply --force'
+    else
+      echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
+      sudo -u #{USERNAME} -i bash -c 'sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
+    fi
+
+    # Revoke passwordless sudo now that chezmoi (and any apt installs it triggered) is done.
+    echo "Revoking passwordless sudo for #{USERNAME}..."
+    sudo rm -f /etc/sudoers.d/90-#{USERNAME}-nopasswd
 
     # 6. AI CLI Tools (VM-only, not part of dotfiles)
     if ! sudo -u #{USERNAME} -i command -v agy &>/dev/null; then

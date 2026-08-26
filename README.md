@@ -37,12 +37,24 @@ Before starting, ensure you have the following installed on your host machine (b
 
 3. An SSH key generated at `~/.ssh/id_ed25519` (the script will automatically inject it for passwordless access).
 
-4. *(Optional, for dotfiles via chezmoi)* A GitHub **fine-grained Personal Access Token** with **read-only** access, saved as plain text at `~/.ssh/github_pat_readonly`:
-   ```bash
-   echo -n "your-token-here" > ~/.ssh/github_pat_readonly
-   chmod 600 ~/.ssh/github_pat_readonly
-   ```
-   Generate one at GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens**, scoped to the repositories you need (e.g. your dotfiles repo) with **Contents: Read-only** permission. Unlike a per-repo Deploy Key, a single token can cover multiple repositories. This only grants the VM read access for the one-way `DOTFILES_REPO` clone/update via chezmoi — see [Repos & Git Workflow](#repos--git-workflow) for how regular repos under `~/repos` are handled instead.
+4. A [chezmoi](https://www.chezmoi.io/)-compatible dotfiles repo on GitHub, and a read-only PAT to clone it. `vagrant up`/`vagrant provision` **refuse to run without this** — chezmoi applying your dotfiles is a mandatory boot step, not optional. Set it up in three parts:
+
+   1. **Have a dotfiles repo already on GitHub** (private is fine — it doesn't need to be public). This is what chezmoi clones and applies inside the VM on boot; if you don't have one yet, see chezmoi's [Quick start](https://www.chezmoi.io/quick-start/) for how to turn a dotfiles directory into one.
+
+   2. **Point `DOTFILES_REPO` at it**, in your gitignored `Vagrantfile.local` (the tracked `Vagrantfile` only has a placeholder default):
+      ```ruby
+      DOTFILES_REPO = "https://github.com/your-username/your-dotfiles.git"
+      ```
+      (See [Customization](#customization-vagrantfile) for all overridable variables.)
+
+   3. **Generate a fine-grained PAT** scoped to that repo, and save it as plain text at `~/.ssh/github_pat_readonly`:
+      ```bash
+      echo -n "your-token-here" > ~/.ssh/github_pat_readonly
+      chmod 600 ~/.ssh/github_pat_readonly
+      ```
+      Generate one at GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens**, scoped to your dotfiles repo (or more) with **Contents: Read-only** permission. Unlike a per-repo Deploy Key, a single token can cover multiple repositories.
+
+   This PAT also gives the VM general read-only HTTPS access to GitHub as that user, available for any other `git clone`/`pull` you'd run inside the VM — though regular repos live on the host and are shared read/write into the VM via the `~/repos` synced folder instead, so they never need it — see [Repos & Git Workflow](#repos--git-workflow).
 
 ---
 
@@ -108,8 +120,8 @@ You can customize the VM by modifying the configuration variables at the top of 
 * `VM_PRIVATE_IP`: The static IP used in `"private"` mode (default: `192.168.56.10`).
 * `VM_BRIDGED_IP`: The static IP used in `"public_static"` mode (default: `192.168.15.10`).
 * `NETWORK_INTERFACE_PREFIX`: The prefix of your host's physical network interface for Bridge modes (default: `"en"`; e.g., `"wlp"` for Wi-Fi, `"en"` for wired ethernet).
-* `DOTFILES_REPO`: The HTTPS URL of your dotfiles repo, applied via `chezmoi` on first boot (default: `"https://github.com/your-username/dotfiles.git"`). Requires the PAT from [Prerequisites](#prerequisites) to be set up, otherwise this step is skipped.
-* `VM_GIT_PAT_FILENAME`: The filename (inside `~/.ssh` on your **host**) holding the read-only GitHub PAT (default: `"github_pat_readonly"`).
+* `DOTFILES_REPO`: The HTTPS URL of your dotfiles repo, applied via `chezmoi` on first boot (default: `"https://github.com/your-username/dotfiles.git"`).
+* `VM_GIT_PAT_FILENAME`: The filename (inside `~/.ssh` on your **host**) holding the required, read-only GitHub PAT (default: `"github_pat_readonly"`) — see [Prerequisites](#prerequisites). Without it, `vagrant up`/`vagrant provision` fail immediately with a clear error before touching the VM.
 
 ---
 
@@ -130,10 +142,21 @@ alias vm-destroy='cd ~/repos/vagrant-sandbox && vagrant destroy && cd -'
 
 ## Repos & Git Workflow
 
+### Recommended: `~/repos` synced folder (git stays on the host)
+
 `~/repos` on your host is shared into the VM at `/home/USERNAME/repos` as a synced folder (bidirectional VirtualBox shared folder). This means:
 
 * Any repo you keep under `~/repos` on the host is the **same files** you see inside the VM — there's no separate clone to keep in sync.
 * All git network operations (`clone`, `fetch`, `pull`, `push`) for these repos should be run **from the host**, in that same `~/repos/...` directory, using your host's own SSH keys/agent.
-* Inside the VM, just edit files under `~/repos/...` normally (CLI tools, editors, Claude Code, etc.) — there's no need for the VM to hold any git write credentials.
+* Inside the VM, just edit files under `~/repos/...` normally (CLI tools, editors, Claude Code, etc.) — the VM's own GitHub PAT (see [Prerequisites](#prerequisites)) is never used for these, only for `DOTFILES_REPO` below.
 
-This is separate from `DOTFILES_REPO` (chezmoi), which the VM clones and updates itself over HTTPS using the optional read-only PAT from [Prerequisites](#prerequisites) — a one-way read-only pull that never needs to push.
+This is the recommended way to work with repos in this sandbox, for two reasons: the repo always exists on the host regardless of whether the VM is even running (it's meant to be disposable — `vagrant destroy` and rebuild at will, without losing any repo state), and keeping git operations off the VM avoids exposing your remote repos to accidental or unwanted writes from something disposable. This is also why the VM's own GitHub PAT (below) is read-only by design rather than a write-capable credential.
+
+### Alternative: cloning directly inside the VM
+
+The VM's own GitHub PAT gives it general **read-only** HTTPS access — not just for `DOTFILES_REPO`. You can `git clone`/`git pull` any repo the token covers directly inside the VM if you want a copy that isn't tied to the host's `~/repos`, but keep in mind that copy only exists inside the VM and is lost on `vagrant destroy`. `git push` over that same HTTPS remote will always be rejected, since the PAT is read-only — that's intentional, to keep a disposable VM from writing to your remote repos by accident. To push from inside the VM anyway, pick one:
+
+* **Authenticate on demand**: when `git push` prompts for credentials, supply a token/password with write access instead of the read-only PAT.
+* **Forward your host's SSH agent**: connect with `ssh -A user@192.168.56.10` (or `ssh -A vm-ubuntu` with the alias from [Getting Started](#getting-started)) so the VM can sign pushes using your host's own SSH key for the duration of that session, then point the repo's push URL at SSH once: `git remote set-url --push origin git@github.com:your-username/your-repo.git`.
+
+`DOTFILES_REPO` (chezmoi) is the one thing that automatically uses the VM's own PAT, to clone/update itself over HTTPS on boot — it never pushes.
