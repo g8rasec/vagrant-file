@@ -114,6 +114,10 @@ Vagrant.configure("2") do |config|
     host.vm.hostname = HOSTNAME
     host.vm.disk :disk, size: DISK_SIZE, primary: true
 
+    # Mount /vagrant owned by USERNAME instead of Vagrant's default (the SSH user,
+    # "vagrant") so it can be read/written/committed without sudo.
+    host.vm.synced_folder ".", "/vagrant", owner: USERNAME, group: USERNAME
+
     # Apply network configuration based on mode
     case NETWORK_MODE
     when "private"
