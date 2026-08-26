@@ -114,9 +114,10 @@ Vagrant.configure("2") do |config|
     host.vm.hostname = HOSTNAME
     host.vm.disk :disk, size: DISK_SIZE, primary: true
 
-    # Mount /vagrant owned by USERNAME instead of Vagrant's default (the SSH user,
-    # "vagrant") so it can be read/written/committed without sudo.
-    host.vm.synced_folder ".", "/vagrant", owner: USERNAME, group: USERNAME
+    # Share the host's ~/repos into the VM for repos cloned (and pushed) from the
+    # host via SSH. Git network access for these repos never happens inside the
+    # VM itself — only the resulting working tree is visible here.
+    host.vm.synced_folder "~/repos", "/home/#{USERNAME}/repos", owner: USERNAME, group: USERNAME, create: true
 
     # Apply network configuration based on mode
     case NETWORK_MODE
