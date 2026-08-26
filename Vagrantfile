@@ -79,6 +79,11 @@ if VM_GIT_PAT.empty?
         "dotfiles (DOTFILES_REPO) via chezmoi on VM boot. See README Prerequisites for how to generate one."
 end
 
+# Push-capable SSH equivalent of DOTFILES_REPO, so the chezmoi source repo can be
+# pushed to from inside the VM (via `ssh -A`) without carrying the read-only PAT
+# over into its push URL. Only rewrites a plain "https://github.com/..." URL.
+DOTFILES_REPO_SSH = DOTFILES_REPO.sub(%r{\Ahttps://github\.com/}, "git@github.com:")
+
 GATEWAY_NETWORK = if NETWORK_MODE.start_with?("public")
                     `ip route | awk '/default/ && $5 ~ /#{NETWORK_INTERFACE_PREFIX}/ {print $3}'`.strip
                   else
@@ -315,6 +320,11 @@ Vagrant.configure("2") do |config|
       echo "Installing chezmoi and applying #{DOTFILES_REPO}..."
       sudo -u #{USERNAME} -i bash -c 'sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b ~/.local/bin init --apply #{DOTFILES_REPO}'
     fi
+
+    # Point the chezmoi source repo's push URL at SSH instead of the read-only PAT's
+    # HTTPS remote, so a `git push` from inside the VM (e.g. over `ssh -A`) has
+    # somewhere to succeed, without ever making the read-only PAT itself push-capable.
+    sudo -u #{USERNAME} -i git -C /home/#{USERNAME}/.local/share/chezmoi remote set-url --push origin #{DOTFILES_REPO_SSH}
 
     # Revoke passwordless sudo now that chezmoi (and any apt installs it triggered) is done.
     echo "Revoking passwordless sudo for #{USERNAME}..."
