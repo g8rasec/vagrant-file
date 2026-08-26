@@ -10,6 +10,7 @@ This repository contains an automated Vagrant configuration to set up a developm
 * **SSH Key Integration**: Automatically injects host SSH keys into the VM for passwordless access (without crashing if keys are missing on the host).
 * **Host Terminfo Sync**: Captures your host's `$TERM` terminfo entry and installs it inside the VM, so SSH from terminal emulators the guest doesn't already recognize (e.g. Ghostty) doesn't get garbled/duplicated input.
 * **Host DNS Resolution**: The VM resolves DNS through the host's resolver, so it follows the host's VPN/corporate DNS instead of using its own.
+* **Dotfiles via chezmoi**: Automatically clones and applies your `DOTFILES_REPO` on every boot/provision (see [Prerequisites](#prerequisites)).
 * **Pre-installed AI CLIs**: Antigravity (`agy`), Claude Code (`claude`), Codex CLI (`codex`).
 
 ---
