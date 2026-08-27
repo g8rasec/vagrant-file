@@ -255,9 +255,15 @@ Vagrant.configure("2") do |config|
     if [ -n "$CURRENT_UID" ] && [ "$CURRENT_UID" != "$REAL_UID" ]; then
       SHARE_NAME=$(awk -v mnt="$REPOS_MOUNT" '$2 == mnt {print $1}' /etc/fstab)
       echo "Remounting $REPOS_MOUNT with uid=$REAL_UID,gid=$REAL_GID (was uid=$CURRENT_UID) for #{USERNAME}..."
-      sudo umount "$REPOS_MOUNT"
-      sudo mount -t vboxsf -o uid=$REAL_UID,gid=$REAL_GID "$SHARE_NAME" "$REPOS_MOUNT"
-      sudo sed -i -E "\\|$REPOS_MOUNT|s/uid=[0-9]+,gid=[0-9]+/uid=$REAL_UID,gid=$REAL_GID/" /etc/fstab
+      # umount can fail with "target is busy" (e.g. a shell with its cwd inside
+      # $REPOS_MOUNT during provisioning). Only rewrite fstab if the remount
+      # actually succeeded — otherwise fstab and the live mount end up out of
+      # sync, silently leaving #{USERNAME} locked out of $REPOS_MOUNT.
+      if sudo umount "$REPOS_MOUNT" && sudo mount -t vboxsf -o uid=$REAL_UID,gid=$REAL_GID "$SHARE_NAME" "$REPOS_MOUNT"; then
+        sudo sed -i -E "\\|$REPOS_MOUNT|s/uid=[0-9]+,gid=[0-9]+/uid=$REAL_UID,gid=$REAL_GID/" /etc/fstab
+      else
+        echo "WARNING: failed to remount $REPOS_MOUNT (target busy?) — left fstab untouched. Re-run 'vagrant provision' once nothing has its cwd inside $REPOS_MOUNT." >&2
+      fi
     fi
 
     # 3.5. Host Terminfo Installation
