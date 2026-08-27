@@ -38,7 +38,7 @@ Before starting, ensure you have the following installed on your host machine (b
 
 3. An SSH key generated at `~/.ssh/id_ed25519` (the script will automatically inject it for passwordless access).
 
-4. A [chezmoi](https://www.chezmoi.io/)-compatible dotfiles repo on GitHub, and a read-only PAT to clone it. `vagrant up`/`vagrant provision` **refuse to run without this** — chezmoi applying your dotfiles is a mandatory boot step, not optional. Set it up in three parts:
+4. A [chezmoi](https://www.chezmoi.io/)-compatible dotfiles repo on GitHub, and a read-only PAT to clone it. `vagrant up`/`vagrant provision` **refuse to run without this** — chezmoi applying your dotfiles is a mandatory boot step, not optional. Set it up in four parts:
 
    1. **Have a dotfiles repo already on GitHub** (private is fine — it doesn't need to be public). This is what chezmoi clones and applies inside the VM on boot; if you don't have one yet, see chezmoi's [Quick start](https://www.chezmoi.io/quick-start/) for how to turn a dotfiles directory into one.
 
@@ -54,6 +54,21 @@ Before starting, ensure you have the following installed on your host machine (b
       chmod 600 ~/.ssh/github_pat_readonly
       ```
       Generate one at GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens**, scoped to your dotfiles repo (or more) with **Contents: Read-only** permission. Unlike a per-repo Deploy Key, a single token can cover multiple repositories.
+
+   4. **Verify the PAT before building the VM.** A missing file is caught at
+      `vagrant up`, but an expired, revoked, or mis-saved token (e.g. truncated
+      on paste, or with stray characters) only surfaces as a `chezmoi: git:
+      exit status 128` / `Authentication failed` mid-provision. Check it
+      against the GitHub API — expect `200`:
+      ```bash
+      tok=$(tr -d '\n' < ~/.ssh/github_pat_readonly)
+      curl -s -o /dev/null -w "%{http_code}\n" \
+        -H "Authorization: Bearer $tok" \
+        https://api.github.com/repos/your-username/your-dotfiles
+      ```
+      `401` → the token itself is bad (regenerate it). `404` → the token is
+      valid but has no access to that repo (fix its repository scope /
+      **Contents: Read-only** permission).
 
    This PAT also gives the VM general read-only HTTPS access to GitHub as that user, available for any other `git clone`/`pull` you'd run inside the VM — though regular repos live on the host and are shared read/write into the VM via the `~/repos` synced folder instead, so they never need it — see [Repos & Git Workflow](#repos--git-workflow).
 
