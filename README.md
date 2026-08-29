@@ -141,18 +141,34 @@ You can customize the VM by modifying the configuration variables at the top of 
 
 ---
 
-## Recommended Aliases (Zsh)
+## Running `vagrant` from any directory
 
-To manage the virtual machine from any directory in your terminal, you can add these aliases to your `~/.zshrc`:
+`vagrant` only finds this VM when run from a directory that contains the
+`Vagrantfile` (or an ancestor of one). To keep using the real `vagrant`
+subcommands (`status`, `up`, `halt`, `destroy`, …) from anywhere without
+`cd`-ing here first, point Vagrant at this repo via `VAGRANT_CWD`.
+
+Add this wrapper function to your `~/.zshrc` — it respects a local
+`Vagrantfile` when you're inside another Vagrant project, and only falls back
+to this sandbox otherwise:
 
 ```bash
-alias vm-status='cd ~/repos/vagrant-sandbox && vagrant status && cd -'
-alias vm-up='cd ~/repos/vagrant-sandbox && vagrant up && cd -'
-alias vm-halt='cd ~/repos/vagrant-sandbox && vagrant halt && cd -'
-alias vm-destroy='cd ~/repos/vagrant-sandbox && vagrant destroy && cd -'
+# vagrant: use the current directory's Vagrantfile if present, else this sandbox
+vagrant() {
+  if [[ -f Vagrantfile || -f ../Vagrantfile || -n "$VAGRANT_CWD" ]]; then
+    command vagrant "$@"
+  else
+    VAGRANT_CWD="$HOME/repos/vagrant-sandbox" command vagrant "$@"
+  fi
+}
 ```
 
-*Remember to run `source ~/.zshrc` in your terminal after adding them to apply the changes.*
+If you only ever use this one Vagrant project, a plain
+`export VAGRANT_CWD="$HOME/repos/vagrant-sandbox"` in `~/.zshrc` is enough —
+but note it makes *every* `vagrant` call target this sandbox, even from inside
+another project.
+
+*Remember to run `source ~/.zshrc` (or open a new shell) afterwards to apply the changes.*
 
 ---
 
