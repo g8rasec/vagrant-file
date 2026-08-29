@@ -238,33 +238,11 @@ Vagrant.configure("2") do |config|
       echo "User #{USERNAME} already exists."
     fi
 
-    # 3.1. Fix Repos Synced-Folder Ownership
-    # The synced_folder mount_options in the Vagrantfile use a static
-    # placeholder uid/gid=1000, since Vagrant mounts it before #{USERNAME}
-    # exists and the real UID/GID depends on which regular users the box
-    # already ships with (e.g. "vagrant", and cloud-init's default "ubuntu"
-    # user on official Canonical images) — so it isn't always 1000. Now that
-    # #{USERNAME} exists, detect its real UID/GID and remount with the
-    # correct values if they don't already match.
-    REPOS_MOUNT="/home/#{USERNAME}/repos"
-    REAL_UID=$(id -u #{USERNAME})
-    REAL_GID=$(id -g #{USERNAME})
-    # vboxsf never surfaces uid=/gid= in /proc/mounts (findmnt -o OPTIONS comes back
-    # empty for them), so read the mapped owner off the mount point itself instead.
-    CURRENT_UID=$(stat -c '%u' "$REPOS_MOUNT" 2>/dev/null)
-    if [ -n "$CURRENT_UID" ] && [ "$CURRENT_UID" != "$REAL_UID" ]; then
-      SHARE_NAME=$(awk -v mnt="$REPOS_MOUNT" '$2 == mnt {print $1}' /etc/fstab)
-      echo "Remounting $REPOS_MOUNT with uid=$REAL_UID,gid=$REAL_GID (was uid=$CURRENT_UID) for #{USERNAME}..."
-      # umount can fail with "target is busy" (e.g. a shell with its cwd inside
-      # $REPOS_MOUNT during provisioning). Only rewrite fstab if the remount
-      # actually succeeded — otherwise fstab and the live mount end up out of
-      # sync, silently leaving #{USERNAME} locked out of $REPOS_MOUNT.
-      if sudo umount "$REPOS_MOUNT" && sudo mount -t vboxsf -o uid=$REAL_UID,gid=$REAL_GID "$SHARE_NAME" "$REPOS_MOUNT"; then
-        sudo sed -i -E "\\|$REPOS_MOUNT|s/uid=[0-9]+,gid=[0-9]+/uid=$REAL_UID,gid=$REAL_GID/" /etc/fstab
-      else
-        echo "WARNING: failed to remount $REPOS_MOUNT (target busy?) — left fstab untouched. Re-run 'vagrant provision' once nothing has its cwd inside $REPOS_MOUNT." >&2
-      fi
-    fi
+    # 3.1. Repos synced-folder ownership
+    # Handled by the dedicated "fix-repos-ownership" provisioner further down,
+    # which runs on EVERY boot (run: "always"), not just under `--provision`.
+    # Vagrant re-applies the placeholder uid/gid=1000 from the synced_folder
+    # mount_options on each `vagrant up`, so the fix has to re-run every time.
 
     # 3.5. Host Terminfo Installation
     # Installs the host's TERM terminfo (copied in by the "file" provisioner
@@ -358,6 +336,41 @@ Vagrant.configure("2") do |config|
       echo "Codex CLI is already installed."
     fi
 
+  SHELL
+
+  # Repos synced-folder ownership fix — runs on EVERY boot, not just --provision.
+  #
+  # The synced_folder mount_options above use a static placeholder uid/gid=1000,
+  # since Vagrant mounts the share before USERNAME exists and the real UID/GID
+  # depends on which regular users the box already ships with (e.g. "vagrant",
+  # and cloud-init's default "ubuntu" user on official Canonical images) — so it
+  # isn't reliably 1000. Vagrant re-applies that placeholder on every `vagrant
+  # up`, which would lock USERNAME out of ~/repos until the next `--provision`.
+  # run: "always" makes a plain `vagrant up` enough.
+  config.vm.provision "fix-repos-ownership", type: "shell", run: "always", inline: <<-SHELL
+    # Nothing to do until step 3 has created USERNAME. On first boot this
+    # provisioner runs after the main one, so the user already exists by then.
+    id #{USERNAME} &>/dev/null || exit 0
+
+    REPOS_MOUNT="/home/#{USERNAME}/repos"
+    REAL_UID=$(id -u #{USERNAME})
+    REAL_GID=$(id -g #{USERNAME})
+    # vboxsf never surfaces uid=/gid= in /proc/mounts (findmnt -o OPTIONS comes
+    # back empty for them), so read the mapped owner off the mount point itself.
+    CURRENT_UID=$(stat -c '%u' "$REPOS_MOUNT" 2>/dev/null || true)
+    if [ -n "$CURRENT_UID" ] && [ "$CURRENT_UID" != "$REAL_UID" ]; then
+      SHARE_NAME=$(awk -v mnt="$REPOS_MOUNT" '$2 == mnt {print $1}' /etc/fstab)
+      echo "Remounting $REPOS_MOUNT with uid=$REAL_UID,gid=$REAL_GID (was uid=$CURRENT_UID) for #{USERNAME}..."
+      # umount can fail with "target is busy" (e.g. a shell with its cwd inside
+      # $REPOS_MOUNT). Only rewrite fstab if the remount actually succeeded —
+      # otherwise fstab and the live mount end up out of sync, silently leaving
+      # #{USERNAME} locked out of $REPOS_MOUNT.
+      if sudo umount "$REPOS_MOUNT" && sudo mount -t vboxsf -o uid=$REAL_UID,gid=$REAL_GID "$SHARE_NAME" "$REPOS_MOUNT"; then
+        sudo sed -i -E "\\|$REPOS_MOUNT|s/uid=[0-9]+,gid=[0-9]+/uid=$REAL_UID,gid=$REAL_GID/" /etc/fstab
+      else
+        echo "WARNING: failed to remount $REPOS_MOUNT (target busy?) — leave any shell whose cwd is inside it and re-run 'vagrant provision --provision-with fix-repos-ownership'." >&2
+      fi
+    fi
   SHELL
 end
 
