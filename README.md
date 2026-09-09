@@ -23,6 +23,11 @@ echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] 
 sudo apt update && sudo apt install virtualbox-7.1
 ```
 
+> **Secure Boot on?** `vboxdrv` won't load until its module-signing key is
+> enrolled: `sudo /sbin/vboxconfig`, then
+> `sudo mokutil --import /var/lib/shim-signed/mok/MOK.der` and reboot
+> (confirm the key in the blue MOK Manager screen).
+
 **2. Vagrant** ([HashiCorp apt repo](https://developer.hashicorp.com/vagrant/install)):
 
 ```bash
