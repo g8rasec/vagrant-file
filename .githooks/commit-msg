@@ -1,0 +1,70 @@
+#!/bin/sh
+# Enforce Conventional Commits.
+# https://www.conventionalcommits.org/pt-br/v1.0.0-beta.4/
+#
+# Rejected (hard):
+#   1. Subject: <type>(<scope>)?<!>?: <description>
+#      types: build chore ci docs feat fix perf refactor revert style test
+#   2. Subject length <= 72 characters (absolute limit).
+#   3. A body/footer, if present, is preceded by exactly one blank line.
+#   4. No "Co-authored-by:" trailer.
+#
+# Warned (allowed):
+#   - Subject length <= 50 characters (recommended).
+#   - Body/footer lines wrap at <= 72 characters.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+
+msg_file="$1"
+
+# Message minus git's comment lines (verbose diff, scissors, templates).
+content=$(grep -v '^#' "$msg_file")
+
+# First non-empty line is the subject.
+subject=$(printf '%s\n' "$content" | awk 'NF {print; exit}')
+
+# Let git-generated messages through untouched.
+case "$subject" in
+	"Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+esac
+
+fail() {
+	printf 'commit-msg rejected: %s\n' "$1" >&2
+	printf '  rules: .githooks/commit-msg\n' >&2
+	exit 1
+}
+warn() { printf 'commit-msg warning: %s\n' "$1" >&2; }
+
+# 1. Conventional Commits subject.
+printf '%s\n' "$subject" | grep -Eq \
+	'^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))?!?: .+' \
+	|| fail "subject must be '<type>(<scope>)?: <description>' (types: build chore ci docs feat fix perf refactor revert style test)"
+
+# 2 & recommended: subject length.
+subject_len=$(printf '%s' "$subject" | wc -c | tr -d ' ')
+[ "$subject_len" -le 72 ] || fail "subject is $subject_len characters; absolute limit is 72"
+[ "$subject_len" -le 50 ] || warn "subject is $subject_len characters; 50 is recommended"
+
+# 4. No Co-authored-by trailer.
+printf '%s\n' "$content" | grep -Eiq '^[[:space:]]*co-authored-by:' \
+	&& fail "Co-Authored-By trailer is not allowed"
+
+# 3 & recommended: body / footer.
+rest=$(printf '%s\n' "$content" | sed '1d' \
+	| awk '{ l[NR] = $0 } END {
+		s = 1;  while (s <= NR && l[s] ~ /^[[:space:]]*$/) s++;
+		e = NR; while (e >= s  && l[e] ~ /^[[:space:]]*$/) e--;
+		for (i = s; i <= e; i++) print l[i];
+	}')
+
+if [ -n "$rest" ]; then
+	second_line=$(printf '%s\n' "$content" | sed -n '2p')
+	[ -z "$second_line" ] || fail "leave one blank line between the subject and the body"
+
+	printf '%s\n' "$rest" | awk '
+		length($0) > 72 {
+			printf "commit-msg warning: body line %d is %d chars; wrap at 72\n", NR, length($0) > "/dev/stderr"
+		}'
+fi
+
+exit 0

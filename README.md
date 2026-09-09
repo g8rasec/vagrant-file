@@ -189,6 +189,33 @@ too, so if a particular login context doesn't pick the function up, add it to
 
 ---
 
+## Commit conventions
+
+Commit messages in this repo follow
+[Conventional Commits](https://www.conventionalcommits.org/pt-br/v1.0.0-beta.4/),
+enforced by the tracked `.githooks/commit-msg` hook:
+
+* Subject: `<type>(<scope>)?: <description>` — recommended **≤ 50**
+  characters, absolute limit **72**. Types: `build`, `chore`, `ci`, `docs`,
+  `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test` (`docs`
+  commits use no scope). Add `!` before the colon for a breaking change.
+* Body (optional): one blank line after the subject, then prose with each
+  line wrapped at **72** characters. An optional footer (`Refs: #123`,
+  `BREAKING CHANGE: …`) follows after another blank line.
+* No `Co-Authored-By:` trailer.
+
+The hook **rejects** a missing/invalid type, a subject over 72, a body not
+preceded by a blank line, or a `Co-Authored-By:` trailer. It **warns**
+(without blocking) on a subject over 50 or a body line over 72.
+
+Git doesn't run tracked hooks automatically. Enable them once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+---
+
 ## Repos & Git Workflow
 
 ### Recommended: `~/repos` synced folder (git stays on the host)
