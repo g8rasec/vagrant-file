@@ -36,7 +36,17 @@ Before starting, ensure you have the following installed on your host machine (b
 
    > These version numbers were the latest available in each repo as of August 2026 — a plain `apt install` currently lands on them exactly, but isn't pinned. A newer release in either repo will install ahead of the reference version instead of matching it; pin the package (e.g. `apt install vagrant=2.4.9-1`) if exact parity matters, keeping in mind these repos typically only keep the latest build available under that exact version string.
 
-3. An SSH key generated at `~/.ssh/id_ed25519` (the script will automatically inject it for passwordless access).
+3. An SSH key pair at `~/.ssh/id_ed25519` / `~/.ssh/id_ed25519.pub` on the host (the script injects the **public** half into the VM for passwordless access). Generate one with `ssh-keygen -t ed25519` if you don't have it.
+
+   > **If you copied the key in from a drive, backup, or cloud sync, fix its permissions first.** exFAT/NTFS/FAT volumes and many sync tools don't preserve Unix file modes, so the private key usually lands group/world-readable (e.g. `0664`). OpenSSH then **ignores the key and silently falls back to a password prompt** — with `ssh -v` you'd see `Permissions 0664 for '.../id_ed25519' are too open` / `bad permissions`, and the GNOME Keyring agent refuses to sign with it for the same reason (`agent refused operation`). Restore the modes on the host:
+   >
+   > ```bash
+   > chmod 700 ~/.ssh
+   > chmod 600 ~/.ssh/id_ed25519        # private key — owner read/write only
+   > chmod 644 ~/.ssh/id_ed25519.pub    # public key
+   > ```
+   >
+   > The private key must be owned by you and not accessible by group or others; `~/.ssh` itself must be `700`. The public key's mode doesn't matter to the injection step, but keeping it `644` is conventional.
 
 4. A [chezmoi](https://www.chezmoi.io/)-compatible dotfiles repo on GitHub, and a read-only PAT to clone it. `vagrant up`/`vagrant provision` **refuse to run without this** — chezmoi applying your dotfiles is a mandatory boot step, not optional. Set it up in four parts:
 
@@ -104,6 +114,8 @@ At the top of the `Vagrantfile`, you can modify the `NETWORK_MODE` variable to c
    ```
    *(Or connect directly via standard SSH using the configured IP: `ssh user@192.168.56.10`)*
 
+   > If `ssh` prompts for a password instead of using the injected key, the host's private key almost certainly has bad permissions — see the note in [Prerequisites](#prerequisites) step 3. Run `ssh -v user@192.168.56.10` to confirm (`Permissions … are too open` / `agent refused operation`).
+
    For convenience, add this entry to your `~/.ssh/config` and connect with just `ssh vm-ubuntu`:
    ```ssh-config
    # Vagrant VM - host-only network
@@ -148,9 +160,10 @@ You can customize the VM by modifying the configuration variables at the top of 
 subcommands (`status`, `up`, `halt`, `destroy`, …) from anywhere without
 `cd`-ing here first, point Vagrant at this repo via `VAGRANT_CWD`.
 
-Add this wrapper function to your `~/.zshrc` — it respects a local
-`Vagrantfile` when you're inside another Vagrant project, and only falls back
-to this sandbox otherwise:
+Add this wrapper function to your shell rc file — `~/.zshrc` for zsh,
+`~/.bashrc` for bash (the syntax below works unchanged in both). It respects a
+local `Vagrantfile` when you're inside another Vagrant project, and only falls
+back to this sandbox otherwise:
 
 ```bash
 # vagrant: use the current directory's Vagrantfile if present, else this sandbox
@@ -164,11 +177,15 @@ vagrant() {
 ```
 
 If you only ever use this one Vagrant project, a plain
-`export VAGRANT_CWD="$HOME/repos/vagrant-sandbox"` in `~/.zshrc` is enough —
-but note it makes *every* `vagrant` call target this sandbox, even from inside
-another project.
+`export VAGRANT_CWD="$HOME/repos/vagrant-sandbox"` in the same rc file is
+enough — but note it makes *every* `vagrant` call target this sandbox, even
+from inside another project.
 
-*Remember to run `source ~/.zshrc` (or open a new shell) afterwards to apply the changes.*
+*Remember to run `source ~/.zshrc` / `source ~/.bashrc` (or open a new shell)
+afterwards to apply the changes.* On bash, `~/.bashrc` is only read by
+interactive shells; Ubuntu's default `~/.profile` sources it for login shells
+too, so if a particular login context doesn't pick the function up, add it to
+`~/.profile` as well.
 
 ---
 
